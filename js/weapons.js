@@ -43,7 +43,6 @@ export function shootWeapon(raycaster, camera, scene, enemies, onHit) {
     ammoLeft--;
     if (window.updateWeaponUI) window.updateWeaponUI(currentWeapon, ammoLeft, false);
     
-    // Direction from camera center
     const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const origin = camera.position.clone();
     raycaster.set(origin, dir);
