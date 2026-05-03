@@ -3,18 +3,16 @@ import { CONFIG } from './config.js';
 
 const keyState = { w: false, s: false, a: false, d: false, shift: false };
 let yaw = -Math.PI / 2;
-let pitch = 0.3; // slight downward angle for 3rd person
+let pitch = 0.3;
 let sprintPercent = 100;
 let isSprinting = false;
 
-// Player visual group
 let playerModel;
 let leftLeg, rightLeg, leftArm, rightArm, gunModel;
 
 export function createPlayerModel(scene) {
     const group = new THREE.Group();
     
-    // Body
     const bodyGeo = new THREE.BoxGeometry(0.7, CONFIG.player.modelHeight, 0.5);
     const bodyMat = new THREE.MeshStandardMaterial({ color: CONFIG.player.modelColor });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
@@ -22,7 +20,6 @@ export function createPlayerModel(scene) {
     body.position.y = CONFIG.player.modelHeight / 2;
     group.add(body);
     
-    // Head
     const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.5);
     const headMat = new THREE.MeshStandardMaterial({ color: 0xfdd7a8 });
     const head = new THREE.Mesh(headGeo, headMat);
@@ -30,7 +27,6 @@ export function createPlayerModel(scene) {
     head.position.y = CONFIG.player.modelHeight + 0.2;
     group.add(head);
     
-    // Legs (for walk/run cycle)
     const legMat = new THREE.MeshStandardMaterial({ color: 0x2c3e66 });
     leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.3), legMat);
     rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.3), legMat);
@@ -40,7 +36,6 @@ export function createPlayerModel(scene) {
     rightLeg.castShadow = true;
     group.add(leftLeg, rightLeg);
     
-    // Arms
     const armMat = new THREE.MeshStandardMaterial({ color: CONFIG.player.modelColor });
     leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.3), armMat);
     rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.3), armMat);
@@ -50,7 +45,6 @@ export function createPlayerModel(scene) {
     rightArm.castShadow = true;
     group.add(leftArm, rightArm);
     
-    // Simple gun model (pistol made of cubes)
     gunModel = new THREE.Group();
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 0.15), new THREE.MeshStandardMaterial({ color: 0x443322 }));
     grip.position.set(0, -0.1, 0.2);
@@ -99,7 +93,6 @@ let armSwing = 0;
 let gunBob = 0;
 
 export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
-    // Sprint logic
     let currentSpeed = CONFIG.player.walkSpeed;
     isSprinting = keyState.shift && sprintPercent > 0;
     if (isSprinting) {
@@ -112,7 +105,6 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
     }
     if (onSprintUpdate) onSprintUpdate(sprintPercent);
     
-    // Movement vector
     const move = new THREE.Vector3(0, 0, 0);
     if (keyState.w) move.z -= 1;
     if (keyState.s) move.z += 1;
@@ -125,7 +117,6 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
     
     const isMoving = move.length() > 0.01;
     
-    // Animate legs & arms
     if (isMoving) {
         const swingSpeed = isSprinting ? 18 : 10;
         legSwing += deltaTime * swingSpeed;
@@ -136,7 +127,6 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
         rightLeg.rotation.x = -legAngle;
         leftArm.rotation.z = armAngle - 0.2;
         rightArm.rotation.z = -armAngle - 0.2;
-        // Gun bobbing
         gunBob = Math.sin(armSwing * 2) * 0.03;
         gunModel.position.y = gunBob;
         gunModel.position.x = 0.15 + Math.sin(armSwing * 4) * 0.01;
@@ -149,12 +139,10 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
         gunModel.position.x = 0.15;
     }
     
-    // Update player model position
     playerModel.position.copy(camera.position);
     playerModel.position.y = 0;
     playerModel.rotation.y = yaw;
     
-    // Camera position (third person behind player)
     const camOffset = new THREE.Vector3(0, 1.2, 5);
     camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
@@ -164,7 +152,6 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate) {
     camera.position.y += pitch * 2;
     camera.lookAt(playerModel.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
     
-    // Boundaries
     const limit = CONFIG.world.groundSize / 2 - 3;
     playerModel.position.x = Math.min(limit, Math.max(-limit, playerModel.position.x));
     playerModel.position.z = Math.min(limit, Math.max(-limit, playerModel.position.z));
