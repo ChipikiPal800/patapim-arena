@@ -14,7 +14,7 @@ export function createUI() {
     
     const buildPanel = document.createElement('div');
     buildPanel.className = 'build-panel';
-    buildPanel.innerHTML = `🏗️ BUILD MODE: <span id="buildModeText">WALL</span><br>🔄 Q | 📦 E`;
+    buildPanel.innerHTML = `🏗️ BUILD: <span id="buildModeText">WALL</span><br>Q SWAP | E PLACE`;
     document.body.appendChild(buildPanel);
     
     const crossDiv = document.createElement('div');
@@ -50,11 +50,6 @@ export function updateWeaponUI(weaponId, ammo, isReloading) {
 export function updateSprintBar(percent) {
     const fill = document.getElementById('sprintFill');
     if (fill) fill.style.width = percent + '%';
-}
-
-export function updateBuildModeUI(mode) {
-    const text = document.getElementById('buildModeText');
-    if (text) text.innerText = mode.toUpperCase();
 }
 
 export function showDamageFlash() {
