@@ -1,19 +1,104 @@
-/* Combined bottom panel */
+/* RESET & BASE */
+body {
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Poppins', 'Segoe UI', 'Arial', sans-serif;
+}
+
+/* ===== HEALTH & SHIELD BARS (TOP LEFT) ===== */
+.health-shield-container {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 260px;
+    z-index: 20;
+}
+
+.stat-card {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    padding: 6px 12px;
+    border-left: 4px solid;
+}
+
+.stat-card.health-card {
+    border-left-color: #ff3a3a;
+}
+
+.stat-card.shield-card {
+    border-left-color: #3affea;
+}
+
+.stat-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    color: white;
+}
+
+.stat-value {
+    font-weight: bold;
+}
+
+.stat-bar-bg {
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+}
+
+.stat-bar-fill {
+    height: 100%;
+    transition: width 0.1s ease;
+}
+
+.health-fill {
+    background: #ff3a3a;
+    box-shadow: 0 0 5px #ff3a3a;
+}
+
+.shield-fill {
+    background: #3affea;
+    box-shadow: 0 0 5px #3affea;
+}
+
+/* ===== COINS (TOP RIGHT) ===== */
+.coin-card {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    padding: 8px 16px;
+    font-size: 24px;
+    font-weight: bold;
+    color: gold;
+    z-index: 20;
+}
+
+/* ===== COMBINED BOTTOM PANEL (WEAPONS + BUILDS) ===== */
 .combined-panel {
     position: fixed;
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(12px);
     border-radius: 20px;
-    padding: 12px 24px;
+    padding: 10px 24px;
     display: flex;
     gap: 30px;
     align-items: center;
     z-index: 25;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     font-weight: bold;
 }
 
@@ -60,71 +145,12 @@
     color: #aaffdd;
     font-size: 14px;
     font-weight: bold;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0, 0, 0, 0.5);
     border-radius: 8px;
     padding: 4px 10px;
 }
 
-/* Health/Shield bars moved to top-left */
-.health-shield-container {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 240px;
-    z-index: 20;
-}
-
-.stat-card {
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(8px);
-    border-radius: 8px;
-    padding: 6px 12px;
-    border-left: 4px solid;
-}
-
-.stat-card.health-card { border-left-color: #ff3a3a; }
-.stat-card.shield-card { border-left-color: #3affea; }
-
-.stat-header {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    font-weight: bold;
-    margin-bottom: 4px;
-    color: white;
-}
-
-.stat-bar-bg {
-    background: rgba(0,0,0,0.5);
-    border-radius: 4px;
-    height: 6px;
-    overflow: hidden;
-}
-
-.stat-bar-fill {
-    height: 100%;
-    transition: width 0.1s ease;
-}
-.health-fill { background: #ff3a3a; box-shadow: 0 0 5px #ff3a3a; }
-.shield-fill { background: #3affea; box-shadow: 0 0 5px #3affea; }
-
-.coin-card {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: rgba(0,0,0,0.7);
-    backdrop-filter: blur(8px);
-    border-radius: 12px;
-    padding: 8px 16px;
-    font-size: 24px;
-    font-weight: bold;
-    color: gold;
-    z-index: 20;
-}
-
+/* ===== CROSSHAIR ===== */
 .crosshair-container {
     position: fixed;
     top: 50%;
@@ -137,37 +163,46 @@
 .crosshair {
     width: 22px;
     height: 22px;
-    border: 2px solid rgba(255,255,255,0.9);
+    border: 2px solid rgba(255, 255, 255, 0.9);
     border-radius: 50%;
     position: relative;
 }
-.crosshair::before, .crosshair::after {
+
+.crosshair::before,
+.crosshair::after {
     content: '';
     position: absolute;
     background: white;
 }
+
 .crosshair::before {
     width: 14px;
     height: 2px;
     top: 10px;
     left: -8px;
 }
+
 .crosshair::after {
     width: 2px;
     height: 14px;
     left: 10px;
     top: -8px;
 }
-.scoped .crosshair { display: none; }
 
+/* Hide crosshair when scoped */
+.scoped .crosshair {
+    display: none;
+}
+
+/* ===== DAMAGE FLASH ===== */
 .damage-flash {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(255,0,0,0);
+    background: rgba(255, 0, 0, 0);
     pointer-events: none;
     z-index: 40;
-    transition: background 0.05s;
+    transition: background 0.05s linear;
 }
