@@ -4,13 +4,12 @@ import { createPlayerModel, initPlayerControls, updatePlayerMovement } from './p
 import { initWeapons, switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown } from './weapons.js';
 import { createBlobEnemy, updateEnemies } from './enemies.js';
 import { initBuilding, getBuildMode } from './building.js';
-import { createUI, updateUI, updateWeaponUI, updateSprintBar, updateBuildModeUI, showDamageFlash } from './ui.js';
+import { createUI, updateUI, updateWeaponUI, updateSprintBar, showDamageFlash } from './ui.js';
 
-// Global exports
 window.updateWeaponUI = updateWeaponUI;
 window.showDamageFlash = showDamageFlash;
 
-// Setup scene
+// Scene setup
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1030);
 scene.fog = new THREE.FogExp2(0x0a1030, 0.008);
@@ -43,12 +42,12 @@ const grid = new THREE.GridHelper(CONFIG.world.groundSize, 40, 0x88aaff, 0x33558
 grid.position.y = 0.01;
 scene.add(grid);
 
-// Player model
+// Player
 const playerModel = createPlayerModel(scene);
 initPlayerControls(camera, renderer.domElement, playerModel);
 initWeapons();
-initBuilding(scene);
 createUI();
+initBuilding(scene, () => playerModel.position.clone());
 
 // Enemies
 let enemies = [];
@@ -75,6 +74,7 @@ function onEnemyKilled() {
 }
 window.onEnemyKilled = onEnemyKilled;
 
+// Input
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Digit1') switchWeapon('pistol');
     if (e.code === 'Digit2') switchWeapon('assault');
@@ -94,11 +94,10 @@ function animate() {
     lastTime = now;
     
     const playerPos = updatePlayerMovement(camera, delta, updateSprintBar);
-    window.playerPosition = playerPos;
     updateWeaponCooldown(delta);
     updateEnemies(enemies, playerPos, delta);
     
-    // Enemy collision damage
+    // Enemy collision
     for (let enemy of enemies) {
         const enemyPos = enemy.position.clone();
         enemyPos.y = 0;
