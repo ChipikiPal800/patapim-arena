@@ -1,22 +1,20 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
-import { initPlayerControls, updatePlayerMovement } from './player.js';
+import { createPlayerModel, initPlayerControls, updatePlayerMovement } from './player.js';
 import { initWeapons, switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown } from './weapons.js';
 import { createBlobEnemy, updateEnemies } from './enemies.js';
-import { createUI, updateUI, updateWeaponUI, showDamageFlash } from './ui.js';
+import { initBuilding, getBuildMode } from './building.js';
+import { createUI, updateUI, updateWeaponUI, updateSprintBar, updateBuildModeUI, showDamageFlash } from './ui.js';
 
-// Expose UI functions globally so weapons can call them
+// Global exports
 window.updateWeaponUI = updateWeaponUI;
 window.showDamageFlash = showDamageFlash;
 
-// Three.js setup
+// Setup scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a1030);
 scene.fog = new THREE.FogExp2(0x0a1030, 0.008);
-
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, CONFIG.player.height, 0);
-
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
@@ -41,10 +39,16 @@ const ground = new THREE.Mesh(
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
-
 const grid = new THREE.GridHelper(CONFIG.world.groundSize, 40, 0x88aaff, 0x335588);
 grid.position.y = 0.01;
 scene.add(grid);
+
+// Player model
+const playerModel = createPlayerModel(scene);
+initPlayerControls(camera, renderer.domElement, playerModel);
+initWeapons();
+initBuilding(scene);
+createUI();
 
 // Enemies
 let enemies = [];
@@ -63,7 +67,6 @@ let mouseDown = false;
 function onEnemyKilled() {
     playerCoins += CONFIG.enemies.blob.coinReward;
     updateUI(playerHealth, playerCoins);
-    // respawn enemy somewhere else
     const x = (Math.random() - 0.5) * 120;
     const z = (Math.random() - 0.5) * 120;
     const newEnemy = createBlobEnemy(x, z);
@@ -71,11 +74,6 @@ function onEnemyKilled() {
     scene.add(newEnemy);
 }
 window.onEnemyKilled = onEnemyKilled;
-
-// UI & controls
-createUI();
-initPlayerControls(camera, renderer.domElement);
-initWeapons();
 
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Digit1') switchWeapon('pistol');
@@ -95,16 +93,16 @@ function animate() {
     let delta = Math.min(0.033, (now - lastTime) / 1000);
     lastTime = now;
     
-    const playerPos = updatePlayerMovement(camera, delta);
+    const playerPos = updatePlayerMovement(camera, delta, updateSprintBar);
+    window.playerPosition = playerPos;
     updateWeaponCooldown(delta);
     updateEnemies(enemies, playerPos, delta);
     
     // Enemy collision damage
-    for (let i = 0; i < enemies.length; i++) {
-        const enemyPos = enemies[i].position.clone();
+    for (let enemy of enemies) {
+        const enemyPos = enemy.position.clone();
         enemyPos.y = 0;
-        const dist = playerPos.distanceTo(enemyPos);
-        if (dist < 1.2) {
+        if (playerPos.distanceTo(enemyPos) < 1.2) {
             playerHealth -= CONFIG.enemies.blob.damageToPlayer * delta * 30;
             updateUI(playerHealth, playerCoins);
             showDamageFlash();
