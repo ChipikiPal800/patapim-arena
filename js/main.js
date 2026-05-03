@@ -31,15 +31,13 @@ scene.add(ambient);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(10, 20, 5);
 dirLight.castShadow = true;
-dirLight.receiveShadow = false;
 scene.add(dirLight);
 
 const fillLight = new THREE.PointLight(0x445566, 0.5);
 fillLight.position.set(0, 5, 0);
 scene.add(fillLight);
 
-// --- GROUND (thick so you can see it from the side) ---
-// Solid collision ground
+// --- GROUND (thick + collision) ---
 const groundPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(CONFIG.world.groundSize, CONFIG.world.groundSize),
     new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.8, side: THREE.DoubleSide })
@@ -49,7 +47,6 @@ groundPlane.receiveShadow = true;
 groundPlane.position.y = -0.5;
 scene.add(groundPlane);
 
-// Thick visual ground (so it doesn't look paper thin)
 const thickGround = new THREE.Mesh(
     new THREE.BoxGeometry(CONFIG.world.groundSize, 1, CONFIG.world.groundSize),
     new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.8 })
@@ -58,14 +55,13 @@ thickGround.position.y = -1;
 thickGround.receiveShadow = true;
 scene.add(thickGround);
 
-// Grid helper on top
 const grid = new THREE.GridHelper(CONFIG.world.groundSize, 40, 0x88aaff, 0x335588);
 grid.position.y = -0.4;
 scene.add(grid);
 
 // --- PLAYER ---
 const playerModel = createPlayerModel(scene);
-initPlayerControls(camera, renderer.domElement, playerModel);
+initPlayerControls(camera, renderer.domElement);
 createUI();
 initBuilding(scene, () => playerModel.position.clone());
 updateGunVisuals('pistol');
@@ -79,8 +75,9 @@ for (let i = 0; i < 3; i++) {
     scene.add(enemies[enemies.length - 1]);
 }
 
-// --- PLAYER STATE ---
+// --- PLAYER STATE (with shield) ---
 let playerHealth = CONFIG.player.health;
+let playerShield = CONFIG.player.shield || 100;
 let playerCoins = 0;
 let mouseDown = false;
 let rightMouseDown = false;
@@ -90,7 +87,7 @@ let bulletTrails = [];
 // --- GAME FUNCTIONS ---
 function onEnemyKilled() {
     playerCoins += CONFIG.enemies.blob.coinReward;
-    updateUI(playerHealth, playerCoins);
+    updateUI(playerHealth, playerShield, playerCoins);
     const x = (Math.random() - 0.5) * 120;
     const z = (Math.random() - 0.5) * 120;
     const newEnemy = createBlobEnemy(x, z);
@@ -98,6 +95,29 @@ function onEnemyKilled() {
     scene.add(newEnemy);
 }
 window.onEnemyKilled = onEnemyKilled;
+
+// Handle damage with shield priority
+function applyDamage(amount) {
+    let remainingDamage = amount;
+    if (playerShield > 0) {
+        const shieldDamage = Math.min(playerShield, remainingDamage);
+        playerShield -= shieldDamage;
+        remainingDamage -= shieldDamage;
+    }
+    playerHealth -= remainingDamage;
+    updateUI(playerHealth, playerShield, playerCoins);
+    showDamageFlash();
+    
+    if (playerHealth <= 0) {
+        // Respawn with full health and shield
+        playerHealth = CONFIG.player.health;
+        playerShield = CONFIG.player.shield || 100;
+        updateUI(playerHealth, playerShield, playerCoins);
+        respawnPlayer();
+        if (playerModel) playerModel.position.set(0, 0, 0);
+        camera.position.set(0, CONFIG.player.height, 0);
+    }
+}
 
 // --- INPUT HANDLING ---
 document.addEventListener('keydown', (e) => {
@@ -129,6 +149,23 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 const raycaster = new THREE.Raycaster();
 let lastTime = performance.now();
 
+// Helper to clean up old bullet trails
+function cleanupBulletTrails() {
+    const now = performance.now();
+    for (let i = bulletTrails.length - 1; i >= 0; i--) {
+        const trail = bulletTrails[i];
+        if (trail && trail.parent && trail.userData?.spawnTime) {
+            if (now - trail.userData.spawnTime > 500) {
+                scene.remove(trail);
+                bulletTrails.splice(i, 1);
+            }
+        } else if (trail && trail.parent) {
+            scene.remove(trail);
+            bulletTrails.splice(i, 1);
+        }
+    }
+}
+
 // --- GAME LOOP ---
 function animate() {
     const now = performance.now();
@@ -153,7 +190,7 @@ function animate() {
     // Update player movement
     const playerPos = updatePlayerMovement(camera, delta, updateSprintBar, isScoped);
     
-    // Hard boundary to prevent flying off map
+    // Hard boundary prevention (extra safety)
     const limit = CONFIG.world.groundSize / 2 - 5;
     if (playerModel) {
         if (Math.abs(playerModel.position.x) > limit) {
@@ -173,25 +210,21 @@ function animate() {
     // Fall off map detection
     if (playerPos.y < CONFIG.world.killY) {
         playerHealth = CONFIG.player.health;
-        updateUI(playerHealth, playerCoins);
-        respawnPlayer(camera);
-        if (playerModel) playerModel.position.copy(camera.position);
+        playerShield = CONFIG.player.shield || 100;
+        updateUI(playerHealth, playerShield, playerCoins);
+        respawnPlayer();
+        if (playerModel) playerModel.position.set(0, CONFIG.player.height / 2, 0);
+        camera.position.set(0, CONFIG.player.height, 0);
     }
 
-    // Enemy collision damage
+    // Enemy collision damage (reduced over time)
     for (let enemy of enemies) {
         const enemyPos = enemy.position.clone();
         enemyPos.y = 0;
-        if (playerPos.distanceTo(enemyPos) < 1.2) {
-            playerHealth -= CONFIG.enemies.blob.damageToPlayer * delta * 30;
-            updateUI(playerHealth, playerCoins);
-            showDamageFlash();
-            if (playerHealth <= 0) {
-                playerHealth = CONFIG.player.health;
-                updateUI(playerHealth, playerCoins);
-                respawnPlayer(camera);
-                if (playerModel) playerModel.position.copy(camera.position);
-            }
+        const distance = playerPos.distanceTo(enemyPos);
+        if (distance < 1.2) {
+            const damage = CONFIG.enemies.blob.damageToPlayer * delta * 30;
+            applyDamage(damage);
             break;
         }
     }
@@ -204,24 +237,7 @@ function animate() {
     }
 
     // Clean up old bullet trails
-    for (let i = bulletTrails.length - 1; i >= 0; i--) {
-        const trail = bulletTrails[i];
-        if (trail && trail.parent) {
-            // Check if trail has existed for more than 0.5 seconds
-            if (trail.userData && trail.userData.spawnTime < performance.now() - 500) {
-                scene.remove(trail);
-                bulletTrails.splice(i, 1);
-            }
-        } else if (trail) {
-            bulletTrails.splice(i, 1);
-        }
-    }
-    // Add spawn time to new trails in shootWeapon (handled there, but ensure it's set)
-    for (let trail of bulletTrails) {
-        if (trail && !trail.userData) {
-            trail.userData = { spawnTime: performance.now() };
-        }
-    }
+    cleanupBulletTrails();
 
     renderer.render(scene, camera);
     requestAnimationFrame(animate);
