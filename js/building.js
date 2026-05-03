@@ -5,12 +5,12 @@ let buildMode = 'wall';
 let buildables = [];
 let hologram = null;
 
-// Wooden material (Fortnite style)
+// Wood material (Fortnite style)
 const woodMaterial = new THREE.MeshStandardMaterial({
     color: 0xc4a27a,
-    roughness: 0.6,
+    roughness: 0.5,
     metalness: 0.1,
-    flatShading: false
+    emissive: 0x221100
 });
 
 const hologramMaterial = new THREE.MeshStandardMaterial({
@@ -55,7 +55,7 @@ function placeBuild(scene, getPlayerPos) {
     switch (buildMode) {
         case 'wall':
             mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, 0.3), woodMaterial);
-            mesh.position.set(pos.x, pos.y + size / 2, pos.z);
+            mesh.position.set(pos.x, pos.y + size/2, pos.z);
             break;
         case 'ramp':
             mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), woodMaterial);
@@ -67,9 +67,9 @@ function placeBuild(scene, getPlayerPos) {
             mesh.position.set(pos.x, pos.y, pos.z);
             break;
         case 'cone':
-            mesh = new THREE.Mesh(new THREE.ConeGeometry(size / 2, size * 0.8, 4), woodMaterial);
-            mesh.position.set(pos.x, pos.y + size * 0.4, pos.z);
-            mesh.rotation.y = Math.PI / 4;
+            mesh = new THREE.Mesh(new THREE.ConeGeometry(size/2, size*0.8, 4), woodMaterial);
+            mesh.position.set(pos.x, pos.y + size*0.4, pos.z);
+            mesh.rotation.y = Math.PI/4;
             break;
     }
     mesh.castShadow = true;
@@ -86,7 +86,7 @@ function updateHologram(scene, getPlayerPos) {
     switch (buildMode) {
         case 'wall':
             hologram = new THREE.Mesh(new THREE.BoxGeometry(size, size, 0.3), hologramMaterial);
-            hologram.position.set(pos.x, pos.y + size / 2, pos.z);
+            hologram.position.set(pos.x, pos.y + size/2, pos.z);
             break;
         case 'ramp':
             hologram = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), hologramMaterial);
@@ -98,9 +98,9 @@ function updateHologram(scene, getPlayerPos) {
             hologram.position.set(pos.x, pos.y, pos.z);
             break;
         case 'cone':
-            hologram = new THREE.Mesh(new THREE.ConeGeometry(size / 2, size * 0.8, 4), hologramMaterial);
-            hologram.position.set(pos.x, pos.y + size * 0.4, pos.z);
-            hologram.rotation.y = Math.PI / 4;
+            hologram = new THREE.Mesh(new THREE.ConeGeometry(size/2, size*0.8, 4), hologramMaterial);
+            hologram.position.set(pos.x, pos.y + size*0.4, pos.z);
+            hologram.rotation.y = Math.PI/4;
             break;
     }
     scene.add(hologram);
