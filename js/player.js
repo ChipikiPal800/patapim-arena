@@ -79,11 +79,20 @@ export function initPlayerControls(camera, domElement, playerObj) {
 }
 
 export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped) {
-    // Sprint + movement speed
+    // Clamp deltaTime to prevent huge jumps
+    const dt = Math.min(deltaTime, 0.033);
+    
+    // Sprint logic
     let currentSpeed = CONFIG.player.walkSpeed;
     let isSprinting = keyState.shift && sprintPercent > 0 && isGrounded && !isScoped;
-    if (isSprinting) { currentSpeed = CONFIG.player.runSpeed; sprintPercent -= CONFIG.player.sprintDrain * deltaTime; if (sprintPercent <= 0) sprintPercent = 0; }
-    else { sprintPercent += CONFIG.player.sprintRegen * deltaTime; if (sprintPercent > 100) sprintPercent = 100; }
+    if (isSprinting) {
+        currentSpeed = CONFIG.player.runSpeed;
+        sprintPercent -= CONFIG.player.sprintDrain * dt;
+        if (sprintPercent <= 0) sprintPercent = 0;
+    } else {
+        sprintPercent += CONFIG.player.sprintRegen * dt;
+        if (sprintPercent > 100) sprintPercent = 100;
+    }
     if (onSprintUpdate) onSprintUpdate(sprintPercent);
     
     // Jump
@@ -93,66 +102,91 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped
     }
     
     // Gravity
-    verticalVelocity -= CONFIG.player.gravity * deltaTime;
-    camera.position.y += verticalVelocity * deltaTime;
+    verticalVelocity -= CONFIG.player.gravity * dt;
+    camera.position.y += verticalVelocity * dt;
     if (camera.position.y <= CONFIG.player.height) {
         camera.position.y = CONFIG.player.height;
         verticalVelocity = 0;
         isGrounded = true;
-    } else { isGrounded = false; }
+    } else {
+        isGrounded = false;
+    }
     
-    // Movement
+    // Movement vector
     const move = new THREE.Vector3(0, 0, 0);
     if (keyState.w) move.z -= 1;
     if (keyState.s) move.z += 1;
     if (keyState.a) move.x -= 1;
     if (keyState.d) move.x += 1;
-    move.normalize();
+    
+    // Only normalize if there's movement
+    if (move.length() > 0) {
+        move.normalize();
+    }
+    
+    // Apply camera rotation
     move.applyQuaternion(camera.quaternion);
     move.y = 0;
-    move.multiplyScalar(currentSpeed * deltaTime);
+    
+    // Apply speed with dt clamp
+    move.multiplyScalar(currentSpeed * dt);
+    
+    // Apply movement
     camera.position.add(move);
     
     // Animations
-    const isMoving = move.length() > 0.01;
+    const isMoving = Math.abs(move.x) > 0.01 || Math.abs(move.z) > 0.01;
     if (isMoving && isGrounded) {
         const swingSpeed = isSprinting ? 20 : 12;
-        legSwing += deltaTime * swingSpeed;
-        armSwing += deltaTime * swingSpeed;
+        legSwing += dt * swingSpeed;
+        armSwing += dt * swingSpeed;
         const legAngle = Math.sin(legSwing) * 0.8;
         const armAngle = Math.sin(armSwing) * 0.6;
-        limbs.leftLeg.rotation.x = legAngle; limbs.rightLeg.rotation.x = -legAngle;
-        limbs.leftArm.rotation.z = armAngle - 0.2; limbs.rightArm.rotation.z = -armAngle - 0.2;
-        gunModel.position.y = Math.sin(armSwing * 2) * 0.03;
+        if (limbs.leftLeg) limbs.leftLeg.rotation.x = legAngle;
+        if (limbs.rightLeg) limbs.rightLeg.rotation.x = -legAngle;
+        if (limbs.leftArm) limbs.leftArm.rotation.z = armAngle - 0.2;
+        if (limbs.rightArm) limbs.rightArm.rotation.z = -armAngle - 0.2;
+        if (gunModel) gunModel.position.y = Math.sin(armSwing * 2) * 0.03;
     } else if (!isGrounded) {
-        jumpLegSwing += deltaTime * 15;
+        jumpLegSwing += dt * 15;
         const jumpAngle = Math.sin(jumpLegSwing) * 0.5;
-        limbs.leftLeg.rotation.x = jumpAngle; limbs.rightLeg.rotation.x = -jumpAngle;
-        limbs.leftArm.rotation.z = 0.5; limbs.rightArm.rotation.z = -0.5;
+        if (limbs.leftLeg) limbs.leftLeg.rotation.x = jumpAngle;
+        if (limbs.rightLeg) limbs.rightLeg.rotation.x = -jumpAngle;
+        if (limbs.leftArm) limbs.leftArm.rotation.z = 0.5;
+        if (limbs.rightArm) limbs.rightArm.rotation.z = -0.5;
     } else {
-        limbs.leftLeg.rotation.x = 0; limbs.rightLeg.rotation.x = 0;
-        limbs.leftArm.rotation.z = -0.2; limbs.rightArm.rotation.z = -0.2;
-        gunModel.position.y = 0;
+        if (limbs.leftLeg) limbs.leftLeg.rotation.x = 0;
+        if (limbs.rightLeg) limbs.rightLeg.rotation.x = 0;
+        if (limbs.leftArm) limbs.leftArm.rotation.z = -0.2;
+        if (limbs.rightArm) limbs.rightArm.rotation.z = -0.2;
+        if (gunModel) gunModel.position.y = 0;
     }
     
     // Update model position
-    playerModel.position.copy(camera.position);
-    playerModel.position.y = 0;
-    playerModel.rotation.y = yaw;
+    if (playerModel) {
+        playerModel.position.copy(camera.position);
+        playerModel.position.y = 0;
+        playerModel.rotation.y = yaw;
+    }
     
-    // Third-person camera with scoping
+    // Third-person camera
     const camOffset = new THREE.Vector3(0, 1.2, isScoped ? 2.5 : 5);
-    camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw))));
+    camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw))
+    ));
     camera.position.copy(playerModel.position).add(camOffset);
     camera.position.y += pitch * 2;
     camera.lookAt(playerModel.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
     
-    // Boundaries (no invisible walls, allow falling)
+    // Boundaries
     const limit = CONFIG.world.groundSize / 2 - 3;
-    playerModel.position.x = Math.min(limit, Math.max(-limit, playerModel.position.x));
-    playerModel.position.z = Math.min(limit, Math.max(-limit, playerModel.position.z));
+    if (playerModel) {
+        playerModel.position.x = Math.min(limit, Math.max(-limit, playerModel.position.x));
+        playerModel.position.z = Math.min(limit, Math.max(-limit, playerModel.position.z));
+    }
     
-    return playerModel.position.clone();
+    return playerModel ? playerModel.position.clone() : new THREE.Vector3(0, 0, 0);
 }
 
 export function updateGunVisuals(weaponId) {
