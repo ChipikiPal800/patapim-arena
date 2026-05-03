@@ -1,28 +1,31 @@
-// All game numbers in one place — easy to tweak
 export const CONFIG = {
     player: {
         health: 100,
-        speed: 5.5,
+        walkSpeed: 4.5,
+        runSpeed: 7.5,
+        sprintDrain: 15,    // % per second
+        sprintRegen: 20,    // % per second
         mouseSensitivity: 0.002,
         height: 1.6,
-        width: 0.6
+        modelHeight: 1.4,
+        modelColor: 0x4e7a9e
     },
     weapons: {
         pistol: {
-            name: "Pistol", damage: 15, fireRate: 0.2, range: 100, ammoPerMag: 15, reloadTime: 1.0,
-            movementPenalty: 0, cost: 0
+            name: "Pistol", damage: 15, fireRate: 0.2, ammoPerMag: 15, reloadTime: 1.0,
+            movementPenalty: 0, cost: 0, range: 100
         },
         assault: {
-            name: "AR", damage: 10, fireRate: 0.08, range: 120, ammoPerMag: 30, reloadTime: 1.2,
-            movementPenalty: 6, cost: 50
+            name: "AR", damage: 10, fireRate: 0.08, ammoPerMag: 30, reloadTime: 1.2,
+            movementPenalty: 6, cost: 50, range: 120
         },
         sniper: {
-            name: "Sniper", damage: 100, fireRate: 1.2, range: 200, ammoPerMag: 5, reloadTime: 2.0,
-            movementPenalty: 13, cost: 215
+            name: "Sniper", damage: 100, fireRate: 1.2, ammoPerMag: 5, reloadTime: 2.0,
+            movementPenalty: 13, cost: 215, range: 200
         },
         shotgun: {
-            name: "Shotgun", damage: 26, pellets: 8, fireRate: 0.9, range: 50, ammoPerMag: 6, reloadTime: 2.5,
-            movementPenalty: 18, cost: 75
+            name: "Shotgun", damage: 26, pellets: 8, fireRate: 0.9, ammoPerMag: 6, reloadTime: 2.5,
+            movementPenalty: 18, cost: 75, range: 50
         }
     },
     enemies: {
@@ -30,5 +33,9 @@ export const CONFIG = {
     },
     world: {
         groundSize: 160, wallHeight: 5
+    },
+    building: {
+        maxBuilds: 50,
+        gridSize: 2.0
     }
 };
