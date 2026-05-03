@@ -29,8 +29,7 @@ export function createBlobEnemy(x, z) {
         isEnemy: true,
         health: CONFIG.enemies.blob.health,
         maxHealth: CONFIG.enemies.blob.health,
-        speed: CONFIG.enemies.blob.speed,
-        barFill
+        speed: CONFIG.enemies.blob.speed
     };
     return group;
 }
@@ -41,5 +40,12 @@ export function updateEnemies(enemiesList, playerPos, deltaTime = 0.016) {
         enemy.position.x += dir.x * CONFIG.enemies.blob.speed * deltaTime;
         enemy.position.z += dir.z * CONFIG.enemies.blob.speed * deltaTime;
         enemy.lookAt(playerPos);
+        
+        // update health bar
+        const bar = enemy.children.find(c => c.userData?.isHealthBar);
+        if (bar) {
+            const percent = enemy.userData.health / enemy.userData.maxHealth;
+            bar.scale.x = Math.max(0, percent);
+        }
     }
 }
