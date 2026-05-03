@@ -1,105 +1,77 @@
-// js/weapons.js
 import * as THREE from 'three';
-import { GAME_CONFIG } from '../config/gameConfig.js';
+import { CONFIG } from './config.js';
 
-let currentWeaponId = 'pistol';
-let ammoLeft = GAME_CONFIG.weapons.pistol.ammoPerMag;
+let currentWeapon = 'pistol';
+let ammoLeft = CONFIG.weapons.pistol.ammoPerMag;
 let canShoot = true;
 let reloading = false;
 let shootCooldown = 0;
 
-export function initWeapons() {
-    // nothing yet
-}
+export function initWeapons() {}
 
 export function switchWeapon(id) {
     if (reloading) return;
-    if (GAME_CONFIG.weapons[id]) {
-        currentWeaponId = id;
-        ammoLeft = GAME_CONFIG.weapons[id].ammoPerMag;
-        updateWeaponUI();
+    if (CONFIG.weapons[id]) {
+        currentWeapon = id;
+        ammoLeft = CONFIG.weapons[id].ammoPerMag;
+        if (window.updateWeaponUI) window.updateWeaponUI(currentWeapon, ammoLeft, false);
     }
 }
 
-export function reload() {
+export function reloadWeapon() {
     if (reloading) return;
-    const weapon = GAME_CONFIG.weapons[currentWeaponId];
-    if (ammoLeft === weapon.ammoPerMag) return;
+    const wp = CONFIG.weapons[currentWeapon];
+    if (ammoLeft === wp.ammoPerMag) return;
     reloading = true;
+    if (window.updateWeaponUI) window.updateWeaponUI(currentWeapon, ammoLeft, true);
     setTimeout(() => {
-        ammoLeft = weapon.ammoPerMag;
+        ammoLeft = wp.ammoPerMag;
         reloading = false;
-        updateWeaponUI();
-    }, weapon.reloadTime * 1000);
-    updateWeaponUI(true); // show reloading
+        if (window.updateWeaponUI) window.updateWeaponUI(currentWeapon, ammoLeft, false);
+    }, wp.reloadTime * 1000);
 }
 
-export function shoot(raycaster, camera, scene, enemies, onHit) {
+export function shootWeapon(raycaster, camera, scene, enemies, onHit) {
     if (!canShoot || reloading) return;
-    const weapon = GAME_CONFIG.weapons[currentWeaponId];
+    const wp = CONFIG.weapons[currentWeapon];
     if (ammoLeft <= 0) {
-        reload();
+        reloadWeapon();
         return;
     }
-    
     canShoot = false;
-    shootCooldown = weapon.fireRate;
+    shootCooldown = wp.fireRate;
     ammoLeft--;
-    updateWeaponUI();
+    if (window.updateWeaponUI) window.updateWeaponUI(currentWeapon, ammoLeft, false);
 
-    // Raycast from center of camera
-    const direction = new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const origin = camera.position.clone();
-    raycaster.set(origin, direction);
+    raycaster.set(origin, dir);
     const intersects = raycaster.intersectObjects(enemies, true);
     
-    if (intersects.length > 0) {
-        let hit = intersects[0];
-        let enemyObj = hit.object;
-        while (enemyObj && !enemyObj.userData.isEnemy) enemyObj = enemyObj.parent;
-        if (enemyObj && enemyObj.userData.health) {
-            let damage = weapon.damage;
-            if (currentWeaponId === 'shotgun') {
-                // shotgun pellet spread? simplified: just damage * pellets
-                damage = weapon.damage * weapon.pellets;
-            }
-            enemyObj.userData.health -= damage;
-            onHit && onHit();
-            if (enemyObj.userData.health <= 0) {
-                // remove enemy
-                const idx = enemies.indexOf(enemyObj);
-                if (idx !== -1) enemies.splice(idx,1);
-                enemyObj.parent.remove(enemyObj);
-                // add coins later
+    if (intersects.length) {
+        let obj = intersects[0].object;
+        while (obj && !obj.userData.isEnemy) obj = obj.parent;
+        if (obj && obj.userData.health) {
+            let dmg = wp.damage;
+            if (currentWeapon === 'shotgun') dmg = wp.damage * wp.pellets;
+            obj.userData.health -= dmg;
+            if (onHit) onHit(obj.userData.health <= 0);
+            if (obj.userData.health <= 0 && obj.parent) {
+                const idx = enemies.indexOf(obj);
+                if (idx !== -1) enemies.splice(idx, 1);
+                obj.parent.remove(obj);
+                if (window.onEnemyKilled) window.onEnemyKilled();
             } else {
-                // update health bar
-                updateEnemyHealthBar(enemyObj);
+                const bar = obj.children.find(c => c.userData?.isHealthBar);
+                if (bar) bar.scale.x = Math.max(0, obj.userData.health / CONFIG.enemies.blob.health);
             }
         }
     }
-}
-
-function updateEnemyHealthBar(enemyObj) {
-    // find health bar child and update scale
-    const bar = enemyObj.children.find(c => c.userData.isHealthBar);
-    if (bar) {
-        const percent = enemyObj.userData.health / GAME_CONFIG.enemies.blob.health;
-        bar.scale.x = Math.max(0, percent);
-    }
-}
-
-function updateWeaponUI(reloadingFlag = false) {
-    const weaponName = GAME_CONFIG.weapons[currentWeaponId].name;
-    let ammoText = reloadingFlag ? "RELOADING" : `${ammoLeft}`;
-    document.getElementById('weaponName').innerText = weaponName;
-    document.getElementById('weaponAmmo').innerText = ammoText;
 }
 
 export function updateWeaponCooldown(deltaTime) {
     if (!canShoot) {
         shootCooldown -= deltaTime;
-        if (shootCooldown <= 0) {
-            canShoot = true;
-        }
+        if (shootCooldown <= 0) canShoot = true;
     }
 }
