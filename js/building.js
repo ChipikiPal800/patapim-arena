@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
+import { keybinds } from './keybinds.js';
 
 let buildMode = 'wall';
 let buildables = [];
 let hologram = null;
+let lastPlaceTime = 0;
 
-// Wood material (Fortnite style)
 const woodMaterial = new THREE.MeshStandardMaterial({
     color: 0xc4a27a,
     roughness: 0.5,
@@ -16,21 +17,25 @@ const woodMaterial = new THREE.MeshStandardMaterial({
 const hologramMaterial = new THREE.MeshStandardMaterial({
     color: 0x44ffaa,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.45,
     emissive: 0x2288aa
 });
 
 export function initBuilding(scene, getPlayerPos) {
     window.addEventListener('keydown', (e) => {
-        if (e.code === 'KeyQ') {
+        if (e.code === keybinds.buildCycle) {
             const types = ['wall', 'ramp', 'floor', 'cone'];
             let idx = types.indexOf(buildMode);
             idx = (idx + 1) % types.length;
             buildMode = types[idx];
             updateBuildUI();
         }
-        if (e.code === 'KeyE') {
-            placeBuild(scene, getPlayerPos);
+        if (e.code === keybinds.buildPlace) {
+            const now = performance.now() / 1000;
+            if (now - lastPlaceTime >= CONFIG.building.placeCooldown) {
+                placeBuild(scene, getPlayerPos);
+                lastPlaceTime = now;
+            }
         }
     });
     setInterval(() => updateHologram(scene, getPlayerPos), 50);
@@ -46,32 +51,45 @@ function getBuildPosition(getPlayerPos) {
     );
 }
 
+function makePieceMesh(mode, size, material) {
+    let mesh;
+    switch (mode) {
+        case 'wall':
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, 0.3), material);
+            break;
+        case 'ramp':
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), material);
+            mesh.rotation.x = Math.PI / 6;
+            break;
+        case 'floor':
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), material);
+            break;
+        case 'cone':
+            mesh = new THREE.Mesh(new THREE.ConeGeometry(size / 2, size * 0.8, 4), material);
+            mesh.rotation.y = Math.PI / 4;
+            break;
+    }
+    return mesh;
+}
+
+function getPieceOffset(mode, size) {
+    switch (mode) {
+        case 'wall':  return new THREE.Vector3(0, size / 2, 0);
+        case 'ramp':  return new THREE.Vector3(0, 0.15, 0);
+        case 'floor': return new THREE.Vector3(0, 0, 0);
+        case 'cone':  return new THREE.Vector3(0, size * 0.4, 0);
+        default:      return new THREE.Vector3();
+    }
+}
+
 function placeBuild(scene, getPlayerPos) {
     if (buildables.length >= CONFIG.building.maxBuilds) return;
     const pos = getBuildPosition(getPlayerPos);
     const size = CONFIG.building.pieceSize;
-    let mesh;
-
-    switch (buildMode) {
-        case 'wall':
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, 0.3), woodMaterial);
-            mesh.position.set(pos.x, pos.y + size/2, pos.z);
-            break;
-        case 'ramp':
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), woodMaterial);
-            mesh.position.set(pos.x, pos.y + 0.15, pos.z);
-            mesh.rotation.x = Math.PI / 6;
-            break;
-        case 'floor':
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), woodMaterial);
-            mesh.position.set(pos.x, pos.y, pos.z);
-            break;
-        case 'cone':
-            mesh = new THREE.Mesh(new THREE.ConeGeometry(size/2, size*0.8, 4), woodMaterial);
-            mesh.position.set(pos.x, pos.y + size*0.4, pos.z);
-            mesh.rotation.y = Math.PI/4;
-            break;
-    }
+    const mesh = makePieceMesh(buildMode, size, woodMaterial.clone());
+    if (!mesh) return;
+    const offset = getPieceOffset(buildMode, size);
+    mesh.position.set(pos.x + offset.x, pos.y + offset.y, pos.z + offset.z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
@@ -79,30 +97,13 @@ function placeBuild(scene, getPlayerPos) {
 }
 
 function updateHologram(scene, getPlayerPos) {
-    if (hologram) scene.remove(hologram);
+    if (hologram) { scene.remove(hologram); hologram = null; }
     const pos = getBuildPosition(getPlayerPos);
     const size = CONFIG.building.pieceSize;
-
-    switch (buildMode) {
-        case 'wall':
-            hologram = new THREE.Mesh(new THREE.BoxGeometry(size, size, 0.3), hologramMaterial);
-            hologram.position.set(pos.x, pos.y + size/2, pos.z);
-            break;
-        case 'ramp':
-            hologram = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), hologramMaterial);
-            hologram.position.set(pos.x, pos.y + 0.15, pos.z);
-            hologram.rotation.x = Math.PI / 6;
-            break;
-        case 'floor':
-            hologram = new THREE.Mesh(new THREE.BoxGeometry(size, 0.3, size), hologramMaterial);
-            hologram.position.set(pos.x, pos.y, pos.z);
-            break;
-        case 'cone':
-            hologram = new THREE.Mesh(new THREE.ConeGeometry(size/2, size*0.8, 4), hologramMaterial);
-            hologram.position.set(pos.x, pos.y + size*0.4, pos.z);
-            hologram.rotation.y = Math.PI/4;
-            break;
-    }
+    hologram = makePieceMesh(buildMode, size, hologramMaterial);
+    if (!hologram) return;
+    const offset = getPieceOffset(buildMode, size);
+    hologram.position.set(pos.x + offset.x, pos.y + offset.y, pos.z + offset.z);
     scene.add(hologram);
 }
 
