@@ -646,6 +646,7 @@ function buildLockerMenu() {
 export function openLocker() { lockerOpen = true; document.getElementById('lockerOverlay')?.classList.remove('hidden'); document.exitPointerLock(); if (window.setPaused) window.setPaused(true); }
 export function closeLocker() { lockerOpen = false; document.getElementById('lockerOverlay')?.classList.add('hidden'); if (window.setPaused) window.setPaused(false); }
 export function isLockerOpen() { return lockerOpen; }
+export { updateLobbyCharacterColor as updateLobbyCharacter };
 
 // Expose functions
 window.updateBuildSlots = updateBuildSlots;
