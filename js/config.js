@@ -49,14 +49,13 @@ export const CONFIG = {
         tileSize: 4.0,
         killY: -25
     },
-    building: {
-        maxBuilds: 250,
-        pieceSize: 4.0,
-        wallHeight: 4.0,
-        placeCooldown: 0.12,
-        placeRange: 12,
-        health: { wall: 150, ramp: 140, floor: 140, cone: 100 }
-    },
+   building: {
+    maxBuilds: 150,
+    pieceSize: 4.0,
+    wallHeight: 4.0,
+    placeCooldown: 0.15,
+    health: { wall: 120, ramp: 110, floor: 110, cone: 100 }
+},
     keybinds: {
         forward:     'KeyW',
         back:        'KeyS',
