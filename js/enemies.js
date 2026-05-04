@@ -303,3 +303,5 @@ export function createDummy(x, z) {
     };
     return group;
 }
+
+export { createDummyEnemy };
