@@ -195,7 +195,7 @@ body {
     font-size: 12px;
     font-weight: 700;
     color: #fff;
-    text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
 }
 
 /* ===== WEAPON & BUILD HOTBAR ===== */
@@ -333,13 +333,19 @@ body {
     border: 1px solid #ff6666;
     z-index: 20;
     white-space: nowrap;
+    animation: cavePulse 1.5s infinite alternate;
+}
+
+@keyframes cavePulse {
+    from { opacity: 0.8; text-shadow: none; }
+    to { opacity: 1; text-shadow: 0 0 10px rgba(255, 0, 0, 0.5); }
 }
 
 .hidden {
     display: none;
 }
 
-/* ===== COINS, CROSSHAIR, FPS, WAVE, KILL FEED ===== */
+/* ===== COINS DISPLAY ===== */
 .coins-display {
     position: fixed;
     top: 20px;
@@ -353,6 +359,7 @@ body {
     z-index: 20;
 }
 
+/* ===== CROSSHAIR ===== */
 .crosshair-container {
     position: fixed;
     top: 50%;
@@ -375,14 +382,49 @@ body {
     background: rgba(255, 255, 255, 0.9);
 }
 
-.crosshair::before { width: 2px; height: 8px; top: 0; left: 11px; }
-.crosshair::after { width: 2px; height: 8px; bottom: 0; left: 11px; }
-.crosshair .ch-left { width: 8px; height: 2px; left: 0; top: 11px; }
-.crosshair .ch-right { width: 8px; height: 2px; right: 0; top: 11px; }
-.crosshair .ch-dot { width: 4px; height: 4px; background: white; border-radius: 50%; position: absolute; top: 10px; left: 10px; }
+.crosshair::before {
+    width: 2px;
+    height: 8px;
+    top: 0;
+    left: 11px;
+}
 
-.scoped .crosshair { display: none; }
+.crosshair::after {
+    width: 2px;
+    height: 8px;
+    bottom: 0;
+    left: 11px;
+}
 
+.crosshair .ch-left {
+    width: 8px;
+    height: 2px;
+    left: 0;
+    top: 11px;
+}
+
+.crosshair .ch-right {
+    width: 8px;
+    height: 2px;
+    right: 0;
+    top: 11px;
+}
+
+.crosshair .ch-dot {
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
+
+.scoped .crosshair {
+    display: none;
+}
+
+/* ===== FPS COUNTER ===== */
 .fps-counter {
     position: fixed;
     top: 70px;
@@ -396,6 +438,7 @@ body {
     font-family: monospace;
 }
 
+/* ===== WAVE INDICATOR ===== */
 .wave-indicator {
     position: fixed;
     top: 20px;
@@ -410,9 +453,15 @@ body {
     z-index: 20;
 }
 
-.wave-number { color: #44ff44; }
-.wave-enemies { color: #ffaa44; }
+.wave-number {
+    color: #44ff44;
+}
 
+.wave-enemies {
+    color: #ffaa44;
+}
+
+/* ===== KILL FEED ===== */
 .kill-feed {
     position: fixed;
     top: 100px;
@@ -438,6 +487,7 @@ body {
     100% { opacity: 0; transform: translateX(20px); }
 }
 
+/* ===== DAMAGE FLASH ===== */
 .damage-flash {
     position: fixed;
     inset: 0;
@@ -447,7 +497,7 @@ body {
     transition: background 0.05s;
 }
 
-/* ===== MENU OVERLAYS ===== */
+/* ===== MENU OVERLAYS (Settings, Armory, Locker) ===== */
 .menu-overlay {
     position: fixed;
     inset: 0;
@@ -495,11 +545,21 @@ body {
 .setting-row label {
     flex: 1;
     color: #bbb;
+    font-size: 14px;
 }
 
 .setting-row input[type="range"] {
     flex: 2;
     accent-color: #00c8ff;
+}
+
+.setting-row input[type="color"] {
+    width: 50px;
+    height: 35px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: transparent;
 }
 
 .toggle-btn {
@@ -509,12 +569,33 @@ body {
     padding: 6px 20px;
     border-radius: 8px;
     cursor: pointer;
+    transition: all 0.1s;
 }
 
 .toggle-btn.active {
     background: rgba(0, 200, 150, 0.15);
     border-color: #00ffaa;
     color: #00ffaa;
+}
+
+.btn-group {
+    display: flex;
+    gap: 6px;
+}
+
+.opt-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #888;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.opt-btn.active {
+    background: rgba(0, 150, 200, 0.3);
+    border-color: #00c8ff;
+    color: #00c8ff;
 }
 
 .menu-footer {
@@ -531,6 +612,12 @@ body {
     padding: 10px 30px;
     border-radius: 10px;
     cursor: pointer;
+    transition: all 0.1s;
+}
+
+.menu-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
 }
 
 .menu-btn.primary {
@@ -539,20 +626,33 @@ body {
     color: white;
 }
 
+.menu-btn.primary:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px rgba(0, 200, 255, 0.3);
+}
+
+/* ===== KEYBINDS GRID ===== */
 .keybinds-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
     max-height: 400px;
     overflow-y: auto;
+    margin-bottom: 16px;
 }
 
 .keybind-row {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
+}
+
+.kb-label {
+    font-size: 13px;
+    color: #bbb;
 }
 
 .kb-btn {
@@ -562,4 +662,40 @@ body {
     padding: 4px 16px;
     border-radius: 6px;
     cursor: pointer;
+    font-weight: bold;
+}
+
+.kb-btn.rebinding {
+    background: rgba(255, 200, 0, 0.2);
+    border-color: #ffd700;
+    color: #ffd700;
+    animation: rebindPulse 0.8s infinite;
+}
+
+@keyframes rebindPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.rebind-hint {
+    text-align: center;
+    color: #ffdd88;
+    font-size: 12px;
+    padding: 10px;
+}
+
+/* ===== TIME OF DAY UI ===== */
+#timeOfDayUI {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #ffdd88;
+    z-index: 20;
+    font-family: monospace;
 }
