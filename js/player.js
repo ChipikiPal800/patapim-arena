@@ -33,7 +33,9 @@ export const player = {
     targetFOV: 75,
     currentFOV: 75,
     aimBlend: 0,
-    bodyHeight: CONFIG.player.height
+    bodyHeight: CONFIG.player.height,
+    // Third-person camera offset
+    cameraOffset: new THREE.Vector3(0, 1.2, 4.5)
 };
 
 let buildModeActive = false;
@@ -219,11 +221,9 @@ export function updateGunVisuals(weaponId) {
 }
 
 export function applyCosmetics() {
-    // Update player colors from COSMETICS
     if (player.body) {
         player.body.children.forEach(child => {
             if (child.isMesh && child.material) {
-                if (child.userData.isSkin) return;
                 child.material.color.set(COSMETICS.bodyColor);
             }
         });
@@ -239,23 +239,20 @@ export function respawnPlayer() {
     player.stamina = 100;
     player.velocity.set(0, 0, 0);
     player.alive = true;
-    if (player.object) {
-        player.object.position.set(0, 0, 0);
-    }
 }
 
 const tmpForward = new THREE.Vector3();
 const tmpRight = new THREE.Vector3();
 const tmpMove = new THREE.Vector3();
 
-export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped) {
+export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped, getTerrainHeight, checkTreeCollision, collideWithBuilds) {
     const dt = Math.min(deltaTime, 0.033);
     const sens = CONFIG.player.mouseSensitivity * SETTINGS.sensitivity;
     const scopeSens = (player.aimBlend || 0) > 0.5 ? CONFIG.player.scopeSensitivityMultiplier : 1.0;
     
     player.yaw -= input.mouseDX * sens * scopeSens;
     player.pitch -= input.mouseDY * sens * scopeSens * (SETTINGS.invertY ? -1 : 1);
-    player.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, player.pitch));
+    player.pitch = Math.max(-Math.PI / 2 + 0.3, Math.min(Math.PI / 2 - 0.1, player.pitch));
     input.mouseDX = 0;
     input.mouseDY = 0;
 
@@ -281,8 +278,12 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped
     
     if ((player.aimBlend || 0) > 0.5) speed *= 0.55;
 
-    player.velocity.x = tmpMove.x * speed;
-    player.velocity.z = tmpMove.z * speed;
+    let moveX = tmpMove.x * speed;
+    let moveZ = tmpMove.z * speed;
+    
+    // Apply to velocity
+    player.velocity.x = moveX;
+    player.velocity.z = moveZ;
     player.velocity.y -= CONFIG.player.gravity * dt;
     
     if (input.jump && player.onGround && !isScoped && !isBuildModeActive()) {
@@ -290,35 +291,64 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped
         player.onGround = false;
     }
 
-    const next = player.object.position.clone();
-    next.x += player.velocity.x * dt;
-    next.z += player.velocity.z * dt;
-    next.y += player.velocity.y * dt;
+    let newPos = player.object.position.clone();
+    newPos.x += player.velocity.x * dt;
+    newPos.z += player.velocity.z * dt;
+    newPos.y += player.velocity.y * dt;
 
-    if (next.y < 0) {
-        next.y = 0;
+    // Terrain collision
+    const terrainY = getTerrainHeight ? getTerrainHeight(newPos.x, newPos.z) : 0;
+    if (newPos.y <= terrainY) {
+        newPos.y = terrainY;
         player.velocity.y = 0;
         player.onGround = true;
     } else {
         player.onGround = false;
     }
+    
+    // Tree collision
+    if (checkTreeCollision) {
+        if (checkTreeCollision(newPos.x, newPos.z, 0.5)) {
+            newPos.x = player.object.position.x;
+            newPos.z = player.object.position.z;
+        }
+    }
+    
+    // Build collision
+    if (collideWithBuilds) {
+        const collResult = collideWithBuilds(player.object.position, newPos, player.velocity);
+        newPos.copy(collResult.position);
+        player.velocity.copy(collResult.velocity);
+        player.onGround = collResult.onGround;
+    }
+    
+    player.object.position.copy(newPos);
 
-    player.object.position.copy(next);
-
+    // Update model rotation
     if (player.rig) {
         player.rig.rotation.y = player.yaw;
         animateBody(dt, tmpMove.lengthSq() > 0, speed);
     }
 
-    const camY = player.object.position.y + CONFIG.player.height + Math.sin(player.walkCycle) * 0.04 * player.speedSmooth;
-    player.camera.position.set(player.object.position.x, camY, player.object.position.z);
-    player.camera.rotation.order = 'YXZ';
-    player.camera.rotation.y = player.yaw;
-    player.camera.rotation.x = player.pitch;
+    // Third-person camera (over-the-shoulder)
+    const camOffset = player.cameraOffset.clone();
+    // Rotate offset based on player yaw
+    const rotatedOffset = camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw))
+    ));
+    camera.position.copy(player.object.position).add(rotatedOffset);
+    camera.position.y += player.pitch * 1.5;
+    camera.lookAt(player.object.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
 
+    // Smooth camera follow
+    const targetPos = camera.position.clone();
+    camera.position.lerp(targetPos, 0.2);
+    
+    // Scope zoom effect
     player.currentFOV += ((player.targetFOV || 75) - player.currentFOV) * Math.min(1, dt * 12);
-    player.camera.fov = player.currentFOV;
-    player.camera.updateProjectionMatrix();
+    camera.fov = player.currentFOV;
+    camera.updateProjectionMatrix();
 
     const targetAim = input.scope ? 1 : 0;
     player.aimBlend = (player.aimBlend || 0) + (targetAim - (player.aimBlend || 0)) * Math.min(1, dt * 10);
