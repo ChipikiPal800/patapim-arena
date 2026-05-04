@@ -3,7 +3,7 @@ import { keybinds, setKeybind, getKeybindLabel } from './keybinds.js';
 
 // ===== UI CREATION =====
 export function createUI() {
-    // Health/Shield bars
+    // Health/Shield bars (bottom left)
     const hudContainer = document.createElement('div');
     hudContainer.className = 'hud-container';
     hudContainer.innerHTML = `
@@ -18,7 +18,7 @@ export function createUI() {
     `;
     document.body.appendChild(hudContainer);
 
-    // Weapon & Build hotbar
+    // Weapon & Build hotbar (bottom center)
     const weaponContainer = document.createElement('div');
     weaponContainer.className = 'weapon-container';
     weaponContainer.innerHTML = `
@@ -231,36 +231,196 @@ export function updateTimeOfDayUI(timeOfDay, isNight) {
     div.innerHTML = `${isNight ? '🌙' : '☀️'} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 }
 
-// ===== LOBBY =====
+// ===== LOBBY SCREEN (Fortnite Style) =====
+let lobbyScene, lobbyCamera, lobbyRenderer, lobbyCharacter;
+let lobbyAnimationId;
+
 function buildLobbyScreen() {
     if (document.getElementById('lobbyScreen')) return;
+    
     const lobby = document.createElement('div');
     lobby.id = 'lobbyScreen';
     lobby.className = 'lobby-screen';
     lobby.innerHTML = `
-        <h1 class="lobby-title">PATAPIM ARENA</h1>
-        <p class="lobby-subtitle">SELECT GAME MODE</p>
-        <div class="lobby-modes">
-            <div class="mode-card" data-mode="zombies"><span class="mode-tag new">HOT</span><div class="mode-icon">🧟</div><div class="mode-name">Zombies</div><div class="mode-desc">Survive endless waves</div></div>
-            <div class="mode-card" data-mode="practice"><div class="mode-icon">🎯</div><div class="mode-name">Practice</div><div class="mode-desc">Train your aim & building</div></div>
-            <div class="mode-card disabled"><span class="mode-tag">SOON</span><div class="mode-icon">🏆</div><div class="mode-name">Battle Royale</div><div class="mode-desc">Last one standing</div></div>
-        </div>
-        <div class="lobby-footer">
-            <button class="lobby-btn" id="lobbySettings">⚙️ Settings</button>
-            <button class="lobby-btn" id="lobbyArmory">🔫 Armory</button>
-            <button class="lobby-btn" id="lobbyLocker">👕 Locker</button>
+        <div class="lobby-background"></div>
+        <div class="lobby-content">
+            <div class="lobby-left">
+                <div class="lobby-logo">
+                    <h1>PATAPIM ARENA</h1>
+                    <p>SEASON 1</p>
+                </div>
+                <div class="lobby-stats">
+                    <div class="stat"><span>🏆</span> 0<span> Wins</span></div>
+                    <div class="stat"><span>💀</span> 0<span> Kills</span></div>
+                    <div class="stat"><span>⭐</span> 0<span> Level</span></div>
+                </div>
+                <div class="lobby-friends">
+                    <div class="friends-header">🎮 FRIENDS ONLINE <span>0</span></div>
+                    <div class="friends-list" id="friendsList">
+                        <div class="friend">🔴 <strong>t203Korra</strong> <span class="friend-status">Leader</span></div>
+                        <div class="friend">🟢 <strong>FPDeyy</strong> <span class="friend-status">Party</span></div>
+                        <div class="friend">🟢 <strong>203Korra</strong> <span class="friend-status">Party</span></div>
+                        <div class="friend">🟢 <strong>VECTIMXTT</strong> <span class="friend-status">Party</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="lobby-center">
+                <div class="lobby-character-container" id="lobbyCharacterContainer"></div>
+                <div class="lobby-username">PATAPIM</div>
+            </div>
+            <div class="lobby-right">
+                <div class="lobby-party">
+                    <div class="party-code">PARTY CODE: <span id="partyCode">USQRNR</span> <button id="copyCodeBtn" class="copy-btn">📋</button></div>
+                    <button class="leave-btn">Leave</button>
+                </div>
+                <div class="lobby-menu-buttons">
+                    <button class="menu-btn" id="lobbyLockerBtn">👕 LOCKER</button>
+                    <button class="menu-btn" id="lobbyShopBtn">🛒 SHOP</button>
+                    <button class="menu-btn" id="lobbyBattlePassBtn">⭐ BATTLE PASS</button>
+                    <button class="menu-btn" id="lobbySettingsBtn">⚙️ SETTINGS</button>
+                    <button class="menu-btn" id="lobbyArmoryBtn">🔫 ARMORY</button>
+                </div>
+                <div class="lobby-play">
+                    <button class="play-btn" id="playBtn">▶ PLAY!</button>
+                    <div class="mode-select" id="modeSelect" style="display:none">
+                        <button class="mode-option" data-mode="zombies">🧟 ZOMBIES</button>
+                        <button class="mode-option" data-mode="practice">🎯 PRACTICE</button>
+                        <button class="mode-option disabled">🏆 BATTLE ROYALE (SOON)</button>
+                    </div>
+                </div>
+                <div class="lobby-store-buttons">
+                    <button class="store-btn">📱 Download on the App Store</button>
+                    <button class="store-btn">▶️ GET IT ON Google Play</button>
+                </div>
+            </div>
         </div>
     `;
     document.body.appendChild(lobby);
-    lobby.querySelectorAll('.mode-card:not(.disabled)').forEach(card => {
-        card.addEventListener('click', () => {
-            if (window.startGame) window.startGame(card.dataset.mode);
+    
+    // Setup 3D character preview
+    setupLobbyCharacter();
+    
+    // Event listeners
+    document.getElementById('lobbySettingsBtn')?.addEventListener('click', () => openSettings());
+    document.getElementById('lobbyArmoryBtn')?.addEventListener('click', () => openArmory());
+    document.getElementById('lobbyLockerBtn')?.addEventListener('click', () => openLocker());
+    document.getElementById('copyCodeBtn')?.addEventListener('click', () => {
+        const code = document.getElementById('partyCode')?.innerText;
+        if (code) navigator.clipboard.writeText(code);
+        addKillFeed('Party code copied!');
+    });
+    document.getElementById('playBtn')?.addEventListener('click', () => {
+        const modeSelect = document.getElementById('modeSelect');
+        if (modeSelect) modeSelect.style.display = modeSelect.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.querySelectorAll('.mode-option:not(.disabled)').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.dataset.mode;
+            if (mode && window.startGame) window.startGame(mode);
         });
     });
-    document.getElementById('lobbySettings')?.addEventListener('click', () => openSettings());
-    document.getElementById('lobbyArmory')?.addEventListener('click', () => openArmory());
-    document.getElementById('lobbyLocker')?.addEventListener('click', () => openLocker());
+    
     showLobby();
+}
+
+function setupLobbyCharacter() {
+    const container = document.getElementById('lobbyCharacterContainer');
+    if (!container) return;
+    
+    lobbyScene = new THREE.Scene();
+    lobbyScene.background = new THREE.Color(0x0a0a2a);
+    
+    lobbyCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    lobbyCamera.position.set(0, 1.5, 3);
+    lobbyCamera.lookAt(0, 1, 0);
+    
+    lobbyRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    lobbyRenderer.setSize(300, 400);
+    lobbyRenderer.setClearColor(0x0a0a2a);
+    container.appendChild(lobbyRenderer.domElement);
+    
+    // Lighting for lobby character
+    const ambient = new THREE.AmbientLight(0x404060);
+    lobbyScene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(2, 5, 3);
+    lobbyScene.add(dirLight);
+    const backLight = new THREE.PointLight(0x4466aa, 0.5);
+    backLight.position.set(0, 2, -2);
+    lobbyScene.add(backLight);
+    
+    // Create a simple stylized character for lobby
+    const characterGroup = new THREE.Group();
+    
+    // Body
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x6da3d4 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.4), bodyMat);
+    body.position.y = 0.85;
+    characterGroup.add(body);
+    
+    // Head
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xfdd7a8 });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 24), headMat);
+    head.position.y = 1.65;
+    characterGroup.add(head);
+    
+    // Visor
+    const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x335599 });
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), visorMat);
+    visor.position.set(0, 1.64, 0.33);
+    characterGroup.add(visor);
+    
+    // Legs
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1a3550 });
+    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), pantsMat);
+    leftLeg.position.set(-0.18, 0.45, 0);
+    characterGroup.add(leftLeg);
+    const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), pantsMat);
+    rightLeg.position.set(0.18, 0.45, 0);
+    characterGroup.add(rightLeg);
+    
+    lobbyCharacter = characterGroup;
+    lobbyScene.add(lobbyCharacter);
+    
+    // Add floating particles
+    const particleCount = 100;
+    const particleGeometry = new THREE.BufferGeometry();
+    const particlePositions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+        particlePositions[i * 3] = (Math.random() - 0.5) * 10;
+        particlePositions[i * 3 + 1] = Math.random() * 4;
+        particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 8 - 2;
+    }
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+    const particleMat = new THREE.PointsMaterial({ color: 0x44aaff, size: 0.05 });
+    const particles = new THREE.Points(particleGeometry, particleMat);
+    lobbyScene.add(particles);
+    
+    // Animate lobby character
+    let time = 0;
+    function animateLobby() {
+        requestAnimationFrame(animateLobby);
+        time += 0.01;
+        if (lobbyCharacter) {
+            lobbyCharacter.rotation.y = Math.sin(time) * 0.3;
+            lobbyCharacter.position.y = Math.sin(time * 1.5) * 0.02;
+        }
+        if (lobbyRenderer && lobbyCamera) {
+            lobbyRenderer.render(lobbyScene, lobbyCamera);
+        }
+    }
+    animateLobby();
+}
+
+export function updateLobbyCharacterColor(colors) {
+    if (!lobbyCharacter) return;
+    lobbyCharacter.children.forEach(child => {
+        if (child.isMesh) {
+            if (child.position.y > 1.5) child.material.color.set(colors.skin || 0xfdd7a8);
+            else if (child.position.y < 0.7) child.material.color.set(colors.pants || 0x1a3550);
+            else child.material.color.set(colors.shirt || 0x6da3d4);
+        }
+    });
 }
 
 export function showLobby() {
@@ -324,8 +484,7 @@ function buildSettingsMenu() {
             <div class="menu-footer"><button class="menu-btn primary" id="closeSettings">Resume</button></div>
         </div>`;
     document.body.appendChild(overlay);
-
-    // Tab switching
+    
     overlay.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             overlay.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -334,15 +493,13 @@ function buildSettingsMenu() {
             document.getElementById('tab-' + btn.dataset.tab)?.classList.remove('hidden');
         });
     });
-
+    
     populateKeybindsGrid();
-
-    // Controls
+    
     document.getElementById('sensitivitySlider')?.addEventListener('input', (e) => { SETTINGS.sensitivity = e.target.value / 100; document.getElementById('sensitivityVal').innerText = SETTINGS.sensitivity.toFixed(1) + 'x'; });
     document.getElementById('scopeSensSlider')?.addEventListener('input', (e) => { SETTINGS.scopeSensitivity = e.target.value / 100; document.getElementById('scopeSensVal').innerText = SETTINGS.scopeSensitivity.toFixed(2) + 'x'; });
     document.getElementById('invertYBtn')?.addEventListener('click', (e) => { SETTINGS.invertY = !SETTINGS.invertY; e.target.innerText = SETTINGS.invertY ? 'ON' : 'OFF'; e.target.classList.toggle('active', SETTINGS.invertY); });
-
-    // Graphics
+    
     overlay.querySelectorAll('.opt-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             overlay.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
@@ -353,8 +510,6 @@ function buildSettingsMenu() {
     });
     document.getElementById('fpsBtn')?.addEventListener('click', (e) => { SETTINGS.fpsCounter = !SETTINGS.fpsCounter; e.target.innerText = SETTINGS.fpsCounter ? 'ON' : 'OFF'; e.target.classList.toggle('active', SETTINGS.fpsCounter); });
     document.getElementById('crosshairColorPicker')?.addEventListener('input', (e) => { SETTINGS.crosshairColor = e.target.value; const ch = document.getElementById('crosshairEl'); if (ch) { ch.querySelectorAll('div').forEach(el => el.style.background = SETTINGS.crosshairColor); } });
-
-    // Audio
     document.getElementById('masterVolSlider')?.addEventListener('input', (e) => { SETTINGS.masterVolume = e.target.value / 100; document.getElementById('masterVolVal').innerText = e.target.value; });
     document.getElementById('sfxVolSlider')?.addEventListener('input', (e) => { SETTINGS.sfxVolume = e.target.value / 100; document.getElementById('sfxVolVal').innerText = e.target.value; });
     document.getElementById('closeSettings')?.addEventListener('click', closeSettings);
@@ -482,6 +637,7 @@ function buildLockerMenu() {
         COSMETICS.accentColor = document.getElementById('pantsColorPicker').value;
         COSMETICS.headColor = document.getElementById('skinColorPicker').value;
         if (window.applyCosmetics) window.applyCosmetics();
+        updateLobbyCharacterColor({ shirt: COSMETICS.bodyColor, pants: COSMETICS.accentColor, skin: COSMETICS.headColor });
         closeLocker();
     });
     document.getElementById('closeLocker')?.addEventListener('click', closeLocker);
@@ -491,7 +647,7 @@ export function openLocker() { lockerOpen = true; document.getElementById('locke
 export function closeLocker() { lockerOpen = false; document.getElementById('lockerOverlay')?.classList.add('hidden'); if (window.setPaused) window.setPaused(false); }
 export function isLockerOpen() { return lockerOpen; }
 
-// Expose functions for other files
+// Expose functions
 window.updateBuildSlots = updateBuildSlots;
 window.updateFlashlightUI = updateFlashlightUI;
 window.updateCaveIndicatorUI = updateCaveIndicatorUI;
