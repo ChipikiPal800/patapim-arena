@@ -1,14 +1,11 @@
 import { CONFIG } from './config.js';
 
-// Runtime keybind map (code -> action)
 export const keybinds = { ...CONFIG.keybinds };
 
-// Set a keybind
 export function setKeybind(action, code) {
     keybinds[action] = code;
 }
 
-// Check if a keyboard event matches an action
 export function isAction(e, action) {
     return e.code === keybinds[action];
 }
