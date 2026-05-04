@@ -13,6 +13,7 @@ function getAudio() {
     return audioCtx;
 }
 
+// Generate gunshot sounds
 function playGunshot(weaponId) {
     const ctx = getAudio();
     if (!ctx) return;
@@ -69,6 +70,7 @@ function playGunshot(weaponId) {
     osc.stop(now + config.decay * 1.5);
 }
 
+// Weapon state
 export const weaponState = {
     current: 'pistol',
     inventory: { pistol: true, assault: false, sniper: false, shotgun: false },
@@ -77,15 +79,14 @@ export const weaponState = {
     cooldown: 0,
     reloading: false,
     reloadTimer: 0,
-    flash: null,
     gunModel: null,
     gunGroup: null
 };
 
+// Build gun model
 function buildGunModel(weaponId) {
     const cfg = CONFIG.weapons[weaponId];
     const group = new THREE.Group();
-
     const bodyMat = new THREE.MeshLambertMaterial({ color: cfg.color });
     const accentMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
     const metalMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
@@ -156,6 +157,7 @@ function buildGunModel(weaponId) {
     return group;
 }
 
+// ─── EXPORTED FUNCTIONS ───────────────────────────────────────────────────────
 export function setupWeapons(camera) {
     const group = new THREE.Group();
     camera.add(group);
@@ -173,6 +175,9 @@ export function switchWeapon(id) {
         const model = buildGunModel(id);
         weaponState.gunGroup.add(model);
         weaponState.gunModel = model;
+    }
+    if (window.updateWeaponUI) {
+        window.updateWeaponUI(id, weaponState.ammo[id], false);
     }
 }
 
@@ -202,43 +207,12 @@ export function reloadWeapon() {
     startReload();
 }
 
-const tmpDir = new THREE.Vector3();
-const raycaster = new THREE.Raycaster();
-
-export function updateWeapons(dt, scene, enemies, onKill, builds) {
-    weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
-
-    if (weaponState.reloading) {
-        weaponState.reloadTimer -= dt;
-        if (weaponState.reloadTimer <= 0) {
-            const id = weaponState.current;
-            const cfg = CONFIG.weapons[id];
-            const need = cfg.ammoPerMag - weaponState.ammo[id];
-            const take = Math.min(need, weaponState.reserveAmmo[id]);
-            weaponState.ammo[id] += take;
-            weaponState.reserveAmmo[id] -= take;
-            weaponState.reloading = false;
-        }
-    }
-
-    if (input.shoot && !weaponState.reloading && weaponState.cooldown <= 0) {
-        const id = weaponState.current;
-        const cfg = CONFIG.weapons[id];
-        if (weaponState.ammo[id] > 0) {
-            fire(scene, enemies, id, cfg, onKill, builds);
-            weaponState.ammo[id]--;
-            weaponState.cooldown = cfg.fireRate;
-        } else {
-            startReload();
-        }
-    }
-
-    animateGun(dt);
-}
-
 export function updateWeaponCooldown(dt) {
     weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
 }
+
+const tmpDir = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
 
 function fire(scene, enemies, id, cfg, onKill, builds) {
     playGunshot(id);
@@ -346,7 +320,6 @@ function animateGun(dt) {
 }
 
 export function shootWeapon(raycaster, camera, scene, enemies, onKill, bulletTrails, builds) {
-    // This is a wrapper for compatibility with main.js
     const id = weaponState.current;
     const cfg = CONFIG.weapons[id];
     if (weaponState.cooldown > 0) return;
@@ -361,20 +334,33 @@ export function shootWeapon(raycaster, camera, scene, enemies, onKill, bulletTra
     weaponState.cooldown = cfg.fireRate;
 }
 
-// Replace the switchWeapon function with this:
-export function switchWeapon(id) {
-    if (!CONFIG.weapons[id]) return;
-    weaponState.current = id;
-    weaponState.reloading = false;
-    weaponState.reloadTimer = 0;
-    if (weaponState.gunGroup) {
-        weaponState.gunGroup.clear();
-        const model = buildGunModel(id);
-        weaponState.gunGroup.add(model);
-        weaponState.gunModel = model;
+export function updateWeapons(dt, scene, enemies, onKill, builds) {
+    weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
+
+    if (weaponState.reloading) {
+        weaponState.reloadTimer -= dt;
+        if (weaponState.reloadTimer <= 0) {
+            const id = weaponState.current;
+            const cfg = CONFIG.weapons[id];
+            const need = cfg.ammoPerMag - weaponState.ammo[id];
+            const take = Math.min(need, weaponState.reserveAmmo[id]);
+            weaponState.ammo[id] += take;
+            weaponState.reserveAmmo[id] -= take;
+            weaponState.reloading = false;
+        }
     }
-    // Update UI
-    if (window.updateWeaponUI) {
-        window.updateWeaponUI(id, weaponState.ammo[id], false);
+
+    if (input.shoot && !weaponState.reloading && weaponState.cooldown <= 0) {
+        const id = weaponState.current;
+        const cfg = CONFIG.weapons[id];
+        if (weaponState.ammo[id] > 0) {
+            fire(scene, enemies, id, cfg, onKill, builds);
+            weaponState.ammo[id]--;
+            weaponState.cooldown = cfg.fireRate;
+        } else {
+            startReload();
+        }
     }
+
+    animateGun(dt);
 }
