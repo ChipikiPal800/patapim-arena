@@ -3,7 +3,7 @@ import { CONFIG, SETTINGS } from './config.js';
 import { player, input } from './player.js';
 import { damageEnemy } from './enemies.js';
 
-// Web Audio API context for synthesized gunshot SFX
+// Web Audio API context for gunshot SFX
 let audioCtx = null;
 function getAudio() {
     if (!audioCtx) {
@@ -13,7 +13,7 @@ function getAudio() {
     return audioCtx;
 }
 
-// Generate gunshot sounds
+// Generate gunshot sounds (lower volume)
 function playGunshot(weaponId) {
     const ctx = getAudio();
     if (!ctx) return;
@@ -21,15 +21,16 @@ function playGunshot(weaponId) {
 
     const now = ctx.currentTime;
     const masterGain = ctx.createGain();
-    masterGain.gain.value = SETTINGS.masterVolume * SETTINGS.sfxVolume;
+    masterGain.gain.value = SETTINGS.masterVolume * SETTINGS.sfxVolume * 0.4;
     masterGain.connect(ctx.destination);
 
     const config = {
-        pistol:  { duration: 0.18, freq: 200, noiseGain: 0.7,  bodyGain: 0.4, lowpass: 1800, decay: 0.12 },
-        assault: { duration: 0.14, freq: 180, noiseGain: 0.6,  bodyGain: 0.35, lowpass: 2200, decay: 0.10 },
-        sniper:  { duration: 0.4,  freq: 80,  noiseGain: 0.9,  bodyGain: 0.7, lowpass: 1200, decay: 0.30 },
-        shotgun: { duration: 0.32, freq: 100, noiseGain: 1.0,  bodyGain: 0.6, lowpass: 1400, decay: 0.25 }
-    }[weaponId] || { duration: 0.15, freq: 200, noiseGain: 0.6, bodyGain: 0.4, lowpass: 1800, decay: 0.12 };
+        pistol:  { duration: 0.12, freq: 220, noiseGain: 0.5, bodyGain: 0.3, lowpass: 2000, decay: 0.08 },
+        assault: { duration: 0.10, freq: 190, noiseGain: 0.4, bodyGain: 0.25, lowpass: 2400, decay: 0.06 },
+        sniper:  { duration: 0.35, freq: 90,  noiseGain: 0.7, bodyGain: 0.5, lowpass: 1300, decay: 0.25 },
+        shotgun: { duration: 0.28, freq: 110, noiseGain: 0.8, bodyGain: 0.45, lowpass: 1500, decay: 0.2 },
+        pickaxe: { duration: 0.08, freq: 300, noiseGain: 0.2, bodyGain: 0.15, lowpass: 3000, decay: 0.05 }
+    }[weaponId] || { duration: 0.1, freq: 200, noiseGain: 0.4, bodyGain: 0.25, lowpass: 2000, decay: 0.08 };
 
     const bufferSize = Math.floor(ctx.sampleRate * config.duration);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -37,7 +38,7 @@ function playGunshot(weaponId) {
     for (let i = 0; i < bufferSize; i++) {
         const t = i / bufferSize;
         const env = Math.exp(-t * (1 / config.decay) * 4);
-        data[i] = (Math.random() * 2 - 1) * env;
+        data[i] = (Math.random() * 2 - 1) * env * 0.7;
     }
     const noiseSrc = ctx.createBufferSource();
     noiseSrc.buffer = buffer;
@@ -45,7 +46,7 @@ function playGunshot(weaponId) {
     const noiseFilter = ctx.createBiquadFilter();
     noiseFilter.type = 'lowpass';
     noiseFilter.frequency.value = config.lowpass;
-    noiseFilter.Q.value = 1.5;
+    noiseFilter.Q.value = 1.2;
 
     const noiseGain = ctx.createGain();
     noiseGain.gain.setValueAtTime(config.noiseGain, now);
@@ -73,30 +74,54 @@ function playGunshot(weaponId) {
 // Weapon state
 export const weaponState = {
     current: 'pistol',
-    inventory: { pistol: true, assault: false, sniper: false, shotgun: false },
-    ammo: { pistol: 15, assault: 30, sniper: 5, shotgun: 6 },
-    reserveAmmo: { pistol: 60, assault: 120, sniper: 25, shotgun: 30 },
+    inventory: { pistol: true, assault: false, sniper: false, shotgun: false, pickaxe: true },
+    ammo: { pistol: 15, assault: 30, sniper: 5, shotgun: 6, pickaxe: 999 },
+    reserveAmmo: { pistol: 60, assault: 120, sniper: 25, shotgun: 30, pickaxe: 999 },
     cooldown: 0,
     reloading: false,
     reloadTimer: 0,
     gunModel: null,
-    gunGroup: null
+    gunGroup: null,
+    swingAnim: 0
 };
 
-// Build gun model
-function buildGunModel(weaponId) {
+// Build gun/pickaxe model
+function buildWeaponModel(weaponId) {
     const cfg = CONFIG.weapons[weaponId];
+    if (!cfg) return new THREE.Group();
+    
     const group = new THREE.Group();
     const bodyMat = new THREE.MeshLambertMaterial({ color: cfg.color });
-    const accentMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
     const metalMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+    const darkMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
 
-    if (weaponId === 'pistol') {
+    if (weaponId === 'pickaxe') {
+        // Pickaxe model
+        const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), darkMat);
+        handle.position.set(0, -0.15, 0);
+        handle.rotation.z = -0.3;
+        group.add(handle);
+        
+        const headBase = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.25), metalMat);
+        headBase.position.set(0.18, 0.05, 0);
+        headBase.rotation.z = -0.3;
+        group.add(headBase);
+        
+        const point = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.25, 4), metalMat);
+        point.position.set(0.32, 0.1, 0);
+        point.rotation.z = -0.3;
+        group.add(point);
+        
+        const backSpike = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 4), metalMat);
+        backSpike.position.set(0.05, 0.02, 0);
+        backSpike.rotation.z = 0.5;
+        group.add(backSpike);
+    } else if (weaponId === 'pistol') {
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.32), bodyMat);
         body.position.set(0, 0, -0.1);
         group.add(body);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), accentMat);
-        grip.position.set(0, -0.14, 0.0);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), darkMat);
+        grip.position.set(0, -0.14, 0);
         group.add(grip);
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.18), metalMat);
         barrel.position.set(0, 0.03, -0.32);
@@ -105,32 +130,32 @@ function buildGunModel(weaponId) {
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.6), bodyMat);
         body.position.set(0, 0, -0.2);
         group.add(body);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), accentMat);
-        grip.position.set(0, -0.16, 0.0);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), darkMat);
+        grip.position.set(0, -0.16, 0);
         group.add(grip);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.16), accentMat);
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.16), darkMat);
         stock.position.set(0, -0.02, 0.18);
         group.add(stock);
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.22), metalMat);
         barrel.position.set(0, 0.04, -0.55);
         group.add(barrel);
-        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.1), accentMat);
+        const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.1), darkMat);
         mag.position.set(0, -0.16, -0.1);
         group.add(mag);
     } else if (weaponId === 'sniper') {
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.85), bodyMat);
         body.position.set(0, 0, -0.3);
         group.add(body);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), accentMat);
-        grip.position.set(0, -0.16, 0.0);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.18, 0.1), darkMat);
+        grip.position.set(0, -0.16, 0);
         group.add(grip);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.22), accentMat);
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.22), darkMat);
         stock.position.set(0, -0.02, 0.22);
         group.add(stock);
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.4), metalMat);
         barrel.position.set(0, 0.04, -0.85);
         group.add(barrel);
-        const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 16), accentMat);
+        const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 16), darkMat);
         scopeBody.rotation.x = Math.PI / 2;
         scopeBody.position.set(0, 0.13, -0.25);
         group.add(scopeBody);
@@ -138,16 +163,16 @@ function buildGunModel(weaponId) {
         const body = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.7), bodyMat);
         body.position.set(0, 0, -0.25);
         group.add(body);
-        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, 0.1), accentMat);
-        grip.position.set(0, -0.16, 0.0);
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.18, 0.1), darkMat);
+        grip.position.set(0, -0.16, 0);
         group.add(grip);
-        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.2), accentMat);
+        const stock = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.14, 0.2), darkMat);
         stock.position.set(0, -0.02, 0.22);
         group.add(stock);
-        const barrel1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.3), metalMat);
-        barrel1.position.set(0, 0.04, -0.65);
-        group.add(barrel1);
-        const pump = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.14), accentMat);
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.3), metalMat);
+        barrel.position.set(0, 0.04, -0.65);
+        group.add(barrel);
+        const pump = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.14), darkMat);
         pump.position.set(0, -0.07, -0.4);
         group.add(pump);
     }
@@ -157,7 +182,6 @@ function buildGunModel(weaponId) {
     return group;
 }
 
-// ─── EXPORTED FUNCTIONS ───────────────────────────────────────────────────────
 export function setupWeapons(camera) {
     const group = new THREE.Group();
     camera.add(group);
@@ -172,7 +196,7 @@ export function switchWeapon(id) {
     weaponState.reloadTimer = 0;
     if (weaponState.gunGroup) {
         weaponState.gunGroup.clear();
-        const model = buildGunModel(id);
+        const model = buildWeaponModel(id);
         weaponState.gunGroup.add(model);
         weaponState.gunModel = model;
     }
@@ -188,7 +212,7 @@ export function getCurrentWeapon() {
 export function refreshAmmoForUpgrade() {
     const id = weaponState.current;
     const cfg = CONFIG.weapons[id];
-    if (weaponState.ammo[id] > cfg.ammoPerMag) {
+    if (cfg && weaponState.ammo[id] > cfg.ammoPerMag) {
         weaponState.ammo[id] = cfg.ammoPerMag;
     }
 }
@@ -196,6 +220,7 @@ export function refreshAmmoForUpgrade() {
 export function startReload() {
     const id = weaponState.current;
     const cfg = CONFIG.weapons[id];
+    if (!cfg || cfg.melee) return;
     if (weaponState.reloading) return;
     if (weaponState.ammo[id] >= cfg.ammoPerMag) return;
     if (weaponState.reserveAmmo[id] <= 0) return;
@@ -209,33 +234,62 @@ export function reloadWeapon() {
 
 export function updateWeaponCooldown(dt) {
     weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
+    if (weaponState.swingAnim > 0) {
+        weaponState.swingAnim = Math.max(0, weaponState.swingAnim - dt * 8);
+        if (weaponState.gunModel) {
+            const swingRot = Math.sin(weaponState.swingAnim * Math.PI) * 1.2;
+            weaponState.gunModel.rotation.x = -swingRot * 0.8;
+            weaponState.gunModel.position.x = 0.25 + swingRot * 0.08;
+        }
+    }
 }
 
 const tmpDir = new THREE.Vector3();
-const raycaster = new THREE.Raycaster();
+const meleeRaycaster = new THREE.Raycaster();
 
-function fire(scene, enemies, id, cfg, onKill, builds) {
-    playGunshot(id);
-
-    player.pitch += cfg.recoilV * (0.7 + Math.random() * 0.6);
-    player.yaw += (Math.random() - 0.5) * cfg.recoilH * 2;
+function fireWeapon(scene, enemies, id, cfg, onKill, builds) {
+    if (!cfg) return;
     
-    if (weaponState.gunModel) {
-        weaponState.gunModel.userData = weaponState.gunModel.userData || {};
-        weaponState.gunModel.userData.kick = (weaponState.gunModel.userData.kick || 0) + 1;
+    // Play sound
+    if (id !== 'pickaxe') playGunshot(id);
+    else playGunshot('pickaxe');
+    
+    // Recoil for guns
+    if (!cfg.melee) {
+        player.pitch += cfg.recoilV * (0.6 + Math.random() * 0.5);
+        player.yaw += (Math.random() - 0.5) * cfg.recoilH * 1.5;
     }
-
-    const flash = new THREE.PointLight(0xffaa44, 6, 4);
-    if (weaponState.gunModel) {
+    
+    // Muzzle flash for guns
+    if (!cfg.melee && weaponState.gunModel) {
+        const flash = new THREE.PointLight(0xffaa66, 5, 3);
         weaponState.gunModel.add(flash);
         flash.position.set(0, 0.04, -0.85);
-        setTimeout(() => {
-            if (weaponState.gunModel) weaponState.gunModel.remove(flash);
-            flash.dispose?.();
-        }, 50);
+        setTimeout(() => { if (weaponState.gunModel) weaponState.gunModel.remove(flash); flash.dispose?.(); }, 40);
     }
-
-    if (id === 'shotgun') {
+    
+    // Melee swing animation
+    if (cfg.melee) {
+        weaponState.swingAnim = 1;
+    }
+    
+    if (cfg.melee) {
+        // Melee attack
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.camera.quaternion);
+        const origin = player.camera.position.clone();
+        meleeRaycaster.set(origin, dir);
+        meleeRaycaster.far = 2.8;
+        const intersects = meleeRaycaster.intersectObjects(enemies, true);
+        if (intersects.length) {
+            let root = intersects[0].object;
+            while (root.parent && !enemies.includes(root)) root = root.parent;
+            if (enemies.includes(root)) {
+                const killed = damageEnemy(root, cfg.damage);
+                if (killed && onKill) onKill(root);
+            }
+        }
+    } else if (id === 'shotgun') {
+        // Shotgun spread
         const pellets = cfg.pellets || 8;
         const spread = cfg.spread || 0.12;
         for (let i = 0; i < pellets; i++) {
@@ -244,7 +298,8 @@ function fire(scene, enemies, id, cfg, onKill, builds) {
             castBullet(scene, enemies, cfg.damage, cfg.range, sx, sy, onKill, builds);
         }
     } else {
-        const inaccuracy = (player.aimBlend || 0) > 0.5 ? 0.005 : 0.02;
+        // Single shot
+        const inaccuracy = (player.aimBlend || 0) > 0.5 ? 0.003 : 0.015;
         const sx = (Math.random() - 0.5) * inaccuracy;
         const sy = (Math.random() - 0.5) * inaccuracy;
         castBullet(scene, enemies, cfg.damage, cfg.range, sx, sy, onKill, builds);
@@ -258,6 +313,7 @@ function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, bui
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(player.camera.quaternion);
     tmpDir.addScaledVector(right, spreadX).addScaledVector(up, spreadY).normalize();
 
+    const raycaster = new THREE.Raycaster();
     raycaster.set(player.camera.getWorldPosition(new THREE.Vector3()), tmpDir);
     raycaster.far = range;
 
@@ -281,7 +337,7 @@ function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, bui
     }
 }
 
-function animateGun(dt) {
+function animateWeapon(dt) {
     if (!weaponState.gunModel) return;
     const m = weaponState.gunModel;
     const ud = m.userData = m.userData || {};
@@ -291,8 +347,8 @@ function animateGun(dt) {
 
     const speed = player.speedSmooth || 0;
     const cycle = player.walkCycle || 0;
-    const bobX = Math.sin(cycle) * 0.02 * speed * (1 - (player.aimBlend || 0));
-    const bobY = Math.abs(Math.sin(cycle * 2)) * 0.025 * speed * (1 - (player.aimBlend || 0));
+    const bobX = Math.sin(cycle) * 0.012 * speed * (1 - (player.aimBlend || 0));
+    const bobY = Math.abs(Math.sin(cycle * 2)) * 0.015 * speed * (1 - (player.aimBlend || 0));
 
     const baseX = THREE.MathUtils.lerp(0.2, 0, player.aimBlend || 0);
     const baseY = THREE.MathUtils.lerp(-0.18, -0.13, player.aimBlend || 0);
@@ -300,38 +356,59 @@ function animateGun(dt) {
 
     m.position.x = baseX + bobX;
     m.position.y = baseY + bobY;
-    m.position.z = baseZ + ud.kick * 0.05;
+    m.position.z = baseZ + ud.kick * 0.04;
 
-    m.rotation.x = -ud.kick * 0.15;
+    m.rotation.x = -ud.kick * 0.12;
     m.rotation.y = THREE.MathUtils.lerp(-0.05, 0, player.aimBlend || 0);
 
-    if (weaponState.reloading) {
+    if (weaponState.reloading && !CONFIG.weapons[weaponState.current]?.melee) {
         const cfg = CONFIG.weapons[weaponState.current];
-        const t = 1 - weaponState.reloadTimer / cfg.reloadTime;
-        const pulse = Math.sin(t * Math.PI);
-        m.position.y -= pulse * 0.2;
-        m.rotation.x -= pulse * 0.5;
+        if (cfg) {
+            const t = 1 - weaponState.reloadTimer / cfg.reloadTime;
+            const pulse = Math.sin(t * Math.PI);
+            m.position.y -= pulse * 0.15;
+            m.rotation.x -= pulse * 0.4;
+        }
     }
 
     const cfg = CONFIG.weapons[weaponState.current];
-    if (player.targetFOV !== undefined) {
-        player.targetFOV = input.scope ? (75 / cfg.scopeZoom) : 75;
+    if (cfg && player.targetFOV !== undefined) {
+        player.targetFOV = input.scope && !cfg.melee ? (75 / cfg.scopeZoom) : 75;
     }
 }
 
 export function shootWeapon(raycaster, camera, scene, enemies, onKill, bulletTrails, builds) {
     const id = weaponState.current;
     const cfg = CONFIG.weapons[id];
+    if (!cfg) return;
+    
     if (weaponState.cooldown > 0) return;
-    if (weaponState.reloading) return;
-    if (weaponState.ammo[id] <= 0) {
+    if (weaponState.reloading && !cfg.melee) return;
+    
+    if (!cfg.melee && weaponState.ammo[id] <= 0) {
         startReload();
         return;
     }
     
-    fire(scene, enemies, id, cfg, onKill, builds);
-    weaponState.ammo[id]--;
+    fireWeapon(scene, enemies, id, cfg, onKill, builds);
+    
+    if (!cfg.melee) {
+        weaponState.ammo[id]--;
+    }
     weaponState.cooldown = cfg.fireRate;
+    
+    // Bullet trail for non-melee
+    if (!cfg.melee) {
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+        const origin = camera.position.clone();
+        const end = origin.clone().add(dir.clone().multiplyScalar(cfg.range));
+        const points = [origin, end];
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffaa66, linewidth: 2 }));
+        trail.userData = { spawnTime: performance.now() };
+        scene.add(trail);
+        bulletTrails.push(trail);
+    }
 }
 
 export function updateWeapons(dt, scene, enemies, onKill, builds) {
@@ -342,10 +419,12 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
         if (weaponState.reloadTimer <= 0) {
             const id = weaponState.current;
             const cfg = CONFIG.weapons[id];
-            const need = cfg.ammoPerMag - weaponState.ammo[id];
-            const take = Math.min(need, weaponState.reserveAmmo[id]);
-            weaponState.ammo[id] += take;
-            weaponState.reserveAmmo[id] -= take;
+            if (cfg && !cfg.melee) {
+                const need = cfg.ammoPerMag - weaponState.ammo[id];
+                const take = Math.min(need, weaponState.reserveAmmo[id]);
+                weaponState.ammo[id] += take;
+                weaponState.reserveAmmo[id] -= take;
+            }
             weaponState.reloading = false;
         }
     }
@@ -353,14 +432,27 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
     if (input.shoot && !weaponState.reloading && weaponState.cooldown <= 0) {
         const id = weaponState.current;
         const cfg = CONFIG.weapons[id];
-        if (weaponState.ammo[id] > 0) {
-            fire(scene, enemies, id, cfg, onKill, builds);
-            weaponState.ammo[id]--;
+        if (cfg && (cfg.melee || weaponState.ammo[id] > 0)) {
+            fireWeapon(scene, enemies, id, cfg, onKill, builds);
+            if (!cfg.melee) weaponState.ammo[id]--;
             weaponState.cooldown = cfg.fireRate;
-        } else {
+            
+            // Bullet trail
+            if (!cfg.melee && player.camera) {
+                const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(player.camera.quaternion);
+                const origin = player.camera.position.clone();
+                const end = origin.clone().add(dir.clone().multiplyScalar(cfg.range));
+                const points = [origin, end];
+                const geo = new THREE.BufferGeometry().setFromPoints(points);
+                const trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffaa66, linewidth: 2 }));
+                trail.userData = { spawnTime: performance.now() };
+                scene.add(trail);
+                if (window.bulletTrails) window.bulletTrails.push(trail);
+            }
+        } else if (!cfg.melee && weaponState.ammo[id] <= 0) {
             startReload();
         }
     }
 
-    animateGun(dt);
+    animateWeapon(dt);
 }
