@@ -126,11 +126,16 @@ function getShotgunIcon() {
 
 // ===== UI UPDATE FUNCTIONS =====
 export function updateUI(health, shield, coins) {
-    document.getElementById('healthFill')?.setAttribute('style', `width:${Math.max(0, health)}%`);
-    document.getElementById('healthValue') && (document.getElementById('healthValue').innerText = Math.floor(health));
-    document.getElementById('shieldFill')?.setAttribute('style', `width:${Math.max(0, shield)}%`);
-    document.getElementById('shieldValue') && (document.getElementById('shieldValue').innerText = Math.floor(shield));
-    document.getElementById('coinVal') && (document.getElementById('coinVal').innerText = coins);
+    const healthFill = document.getElementById('healthFill');
+    if (healthFill) healthFill.style.width = Math.max(0, health) + '%';
+    const healthVal = document.getElementById('healthValue');
+    if (healthVal) healthVal.innerText = Math.floor(health);
+    const shieldFill = document.getElementById('shieldFill');
+    if (shieldFill) shieldFill.style.width = Math.max(0, shield) + '%';
+    const shieldVal = document.getElementById('shieldValue');
+    if (shieldVal) shieldVal.innerText = Math.floor(shield);
+    const coinSpan = document.getElementById('coinVal');
+    if (coinSpan) coinSpan.innerText = coins;
 }
 
 export function updateWeaponUI(weaponId, ammo, isReloading) {
@@ -151,20 +156,36 @@ export function showDamageFlash() {
     }
 }
 
+export function showHitMarker() {
+    const crosshair = document.getElementById('crosshairEl');
+    if (crosshair) {
+        crosshair.style.transform = 'scale(1.3)';
+        crosshair.style.filter = 'brightness(2)';
+        setTimeout(() => {
+            crosshair.style.transform = 'scale(1)';
+            crosshair.style.filter = 'none';
+        }, 100);
+    }
+}
+
 export function setScopedUI(isScoped) {
-    document.querySelector('.crosshair-container')?.classList.toggle('scoped', isScoped);
+    const container = document.querySelector('.crosshair-container');
+    if (container) container.classList.toggle('scoped', isScoped);
 }
 
 export function updateBuildModeUI(active) {
-    document.getElementById('buildModeIndicator')?.classList.toggle('active', active);
+    const indicator = document.getElementById('buildModeIndicator');
+    if (indicator) indicator.classList.toggle('active', active);
 }
 
 export function updateFlashlightUI(active) {
-    document.getElementById('flashlightIndicator')?.classList.toggle('hidden', !active);
+    const indicator = document.getElementById('flashlightIndicator');
+    if (indicator) indicator.classList.toggle('hidden', !active);
 }
 
 export function updateCaveIndicatorUI(inCave) {
-    document.getElementById('caveIndicator')?.classList.toggle('hidden', !inCave);
+    const indicator = document.getElementById('caveIndicator');
+    if (indicator) indicator.classList.toggle('hidden', !inCave);
 }
 
 export function updateFPS(fps) {
@@ -179,8 +200,10 @@ export function updateWaveUI(wave, enemyCount) {
     const el = document.getElementById('waveIndicator');
     if (el) {
         el.classList.remove('hidden');
-        document.getElementById('waveNum') && (document.getElementById('waveNum').innerText = wave);
-        document.getElementById('enemyCount') && (document.getElementById('enemyCount').innerText = enemyCount);
+        const waveNum = document.getElementById('waveNum');
+        const enemyCountSpan = document.getElementById('enemyCount');
+        if (waveNum) waveNum.innerText = wave;
+        if (enemyCountSpan) enemyCountSpan.innerText = enemyCount;
     }
 }
 
@@ -205,7 +228,7 @@ export function updateTimeOfDayUI(timeOfDay, isNight) {
     }
     const hour = Math.floor(timeOfDay * 24);
     const minute = Math.floor((timeOfDay * 24 - hour) * 60);
-    div.innerHTML = `${isNight ? '🌙' : '☀️'} ${hour.toString().padStart(2,'0')}:${minute.toString().padStart(2,'0')}`;
+    div.innerHTML = `${isNight ? '🌙' : '☀️'} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 }
 
 // ===== LOBBY =====
@@ -230,7 +253,9 @@ function buildLobbyScreen() {
     `;
     document.body.appendChild(lobby);
     lobby.querySelectorAll('.mode-card:not(.disabled)').forEach(card => {
-        card.addEventListener('click', () => window.startGame && window.startGame(card.dataset.mode));
+        card.addEventListener('click', () => {
+            if (window.startGame) window.startGame(card.dataset.mode);
+        });
     });
     document.getElementById('lobbySettings')?.addEventListener('click', () => openSettings());
     document.getElementById('lobbyArmory')?.addEventListener('click', () => openArmory());
@@ -241,19 +266,27 @@ function buildLobbyScreen() {
 export function showLobby() {
     const lobby = document.getElementById('lobbyScreen');
     if (lobby) lobby.classList.remove('hidden');
-    document.querySelector('.hud-container')?.setAttribute('style', 'display:none');
-    document.querySelector('.weapon-container')?.setAttribute('style', 'display:none');
-    document.querySelector('.coins-display')?.setAttribute('style', 'display:none');
-    document.querySelector('.crosshair-container')?.setAttribute('style', 'display:none');
+    const hud = document.querySelector('.hud-container');
+    const weapon = document.querySelector('.weapon-container');
+    const coins = document.querySelector('.coins-display');
+    const cross = document.querySelector('.crosshair-container');
+    if (hud) hud.style.display = 'none';
+    if (weapon) weapon.style.display = 'none';
+    if (coins) coins.style.display = 'none';
+    if (cross) cross.style.display = 'none';
 }
 
 export function hideLobby() {
     const lobby = document.getElementById('lobbyScreen');
     if (lobby) lobby.classList.add('hidden');
-    document.querySelector('.hud-container')?.setAttribute('style', 'display:flex');
-    document.querySelector('.weapon-container')?.setAttribute('style', 'display:flex');
-    document.querySelector('.coins-display')?.setAttribute('style', 'display:block');
-    document.querySelector('.crosshair-container')?.setAttribute('style', 'display:block');
+    const hud = document.querySelector('.hud-container');
+    const weapon = document.querySelector('.weapon-container');
+    const coins = document.querySelector('.coins-display');
+    const cross = document.querySelector('.crosshair-container');
+    if (hud) hud.style.display = 'flex';
+    if (weapon) weapon.style.display = 'flex';
+    if (coins) coins.style.display = 'block';
+    if (cross) cross.style.display = 'block';
 }
 
 // ===== SETTINGS MENU =====
@@ -265,27 +298,104 @@ function buildSettingsMenu() {
     overlay.id = 'settingsOverlay';
     overlay.className = 'menu-overlay hidden';
     overlay.innerHTML = `
-        <div class="menu-window"><div class="menu-title">SETTINGS</div>
-        <div class="setting-row"><label>Mouse Sensitivity</label><input type="range" min="5" max="200" value="100" id="sensitivitySlider"><span id="sensitivityVal">1.0x</span></div>
-        <div class="setting-row"><label>Scope Sensitivity</label><input type="range" min="10" max="100" value="50" id="scopeSensSlider"><span id="scopeSensVal">0.5x</span></div>
-        <div class="setting-row"><label>Invert Y</label><button class="toggle-btn" id="invertYBtn">OFF</button></div>
-        <div class="setting-row"><label>FPS Counter</label><button class="toggle-btn" id="fpsBtn">OFF</button></div>
-        <div class="setting-row"><label>Master Volume</label><input type="range" min="0" max="100" value="80" id="masterVolSlider"><span id="masterVolVal">80</span></div>
-        <div class="setting-row"><label>SFX Volume</label><input type="range" min="0" max="100" value="100" id="sfxVolSlider"><span id="sfxVolVal">100</span></div>
-        <div class="menu-footer"><button class="menu-btn primary" id="closeSettings">Resume</button></div></div>`;
+        <div class="menu-window">
+            <div class="menu-title">SETTINGS</div>
+            <div class="settings-tabs">
+                <button class="tab-btn active" data-tab="controls">Controls</button>
+                <button class="tab-btn" data-tab="keybinds">Keybinds</button>
+                <button class="tab-btn" data-tab="graphics">Graphics</button>
+                <button class="tab-btn" data-tab="audio">Audio</button>
+            </div>
+            <div class="tab-content" id="tab-controls">
+                <div class="setting-row"><label>Mouse Sensitivity</label><input type="range" min="5" max="200" value="100" id="sensitivitySlider"><span id="sensitivityVal">1.0x</span></div>
+                <div class="setting-row"><label>Scope Sensitivity</label><input type="range" min="10" max="100" value="50" id="scopeSensSlider"><span id="scopeSensVal">0.5x</span></div>
+                <div class="setting-row"><label>Invert Y</label><button class="toggle-btn" id="invertYBtn">OFF</button></div>
+            </div>
+            <div class="tab-content hidden" id="tab-keybinds"><div class="keybinds-grid" id="keybindsGrid"></div><div class="rebind-hint" id="rebindHint" style="display:none">Press any key to rebind...</div></div>
+            <div class="tab-content hidden" id="tab-graphics">
+                <div class="setting-row"><label>Shadows</label><div class="btn-group"><button class="opt-btn" data-val="off">Off</button><button class="opt-btn" data-val="low">Low</button><button class="opt-btn active" data-val="high">High</button></div></div>
+                <div class="setting-row"><label>FPS Counter</label><button class="toggle-btn" id="fpsBtn">OFF</button></div>
+                <div class="setting-row"><label>Crosshair Color</label><input type="color" id="crosshairColorPicker" value="#ffffff"></div>
+            </div>
+            <div class="tab-content hidden" id="tab-audio">
+                <div class="setting-row"><label>Master Volume</label><input type="range" min="0" max="100" value="80" id="masterVolSlider"><span id="masterVolVal">80</span></div>
+                <div class="setting-row"><label>SFX Volume</label><input type="range" min="0" max="100" value="100" id="sfxVolSlider"><span id="sfxVolVal">100</span></div>
+            </div>
+            <div class="menu-footer"><button class="menu-btn primary" id="closeSettings">Resume</button></div>
+        </div>`;
     document.body.appendChild(overlay);
 
+    // Tab switching
+    overlay.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            overlay.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            overlay.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab)?.classList.remove('hidden');
+        });
+    });
+
+    populateKeybindsGrid();
+
+    // Controls
     document.getElementById('sensitivitySlider')?.addEventListener('input', (e) => { SETTINGS.sensitivity = e.target.value / 100; document.getElementById('sensitivityVal').innerText = SETTINGS.sensitivity.toFixed(1) + 'x'; });
     document.getElementById('scopeSensSlider')?.addEventListener('input', (e) => { SETTINGS.scopeSensitivity = e.target.value / 100; document.getElementById('scopeSensVal').innerText = SETTINGS.scopeSensitivity.toFixed(2) + 'x'; });
     document.getElementById('invertYBtn')?.addEventListener('click', (e) => { SETTINGS.invertY = !SETTINGS.invertY; e.target.innerText = SETTINGS.invertY ? 'ON' : 'OFF'; e.target.classList.toggle('active', SETTINGS.invertY); });
+
+    // Graphics
+    overlay.querySelectorAll('.opt-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            overlay.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            SETTINGS.shadows = btn.dataset.val;
+            if (window.applyShadowSettings) window.applyShadowSettings(SETTINGS.shadows);
+        });
+    });
     document.getElementById('fpsBtn')?.addEventListener('click', (e) => { SETTINGS.fpsCounter = !SETTINGS.fpsCounter; e.target.innerText = SETTINGS.fpsCounter ? 'ON' : 'OFF'; e.target.classList.toggle('active', SETTINGS.fpsCounter); });
+    document.getElementById('crosshairColorPicker')?.addEventListener('input', (e) => { SETTINGS.crosshairColor = e.target.value; const ch = document.getElementById('crosshairEl'); if (ch) { ch.querySelectorAll('div').forEach(el => el.style.background = SETTINGS.crosshairColor); } });
+
+    // Audio
     document.getElementById('masterVolSlider')?.addEventListener('input', (e) => { SETTINGS.masterVolume = e.target.value / 100; document.getElementById('masterVolVal').innerText = e.target.value; });
     document.getElementById('sfxVolSlider')?.addEventListener('input', (e) => { SETTINGS.sfxVolume = e.target.value / 100; document.getElementById('sfxVolVal').innerText = e.target.value; });
     document.getElementById('closeSettings')?.addEventListener('click', closeSettings);
 }
 
-export function openSettings() { if (settingsOpen) return; settingsOpen = true; document.getElementById('settingsOverlay')?.classList.remove('hidden'); document.exitPointerLock(); window.setPaused?.(true); }
-export function closeSettings() { settingsOpen = false; document.getElementById('settingsOverlay')?.classList.add('hidden'); window.setPaused?.(false); }
+function populateKeybindsGrid() {
+    const grid = document.getElementById('keybindsGrid');
+    if (!grid) return;
+    const actions = [
+        ['forward', 'Forward'], ['back', 'Back'], ['left', 'Left'], ['right', 'Right'],
+        ['jump', 'Jump'], ['sprint', 'Sprint'], ['reload', 'Reload'],
+        ['weapon1', 'Weapon 1'], ['weapon2', 'Weapon 2'], ['weapon3', 'Weapon 3'], ['weapon4', 'Weapon 4'],
+        ['buildToggle', 'Build Mode'], ['pickaxe', 'Pickaxe']
+    ];
+    grid.innerHTML = '';
+    actions.forEach(([action, label]) => {
+        const row = document.createElement('div');
+        row.className = 'keybind-row';
+        row.innerHTML = `<span class="kb-label">${label}</span><button class="kb-btn" data-action="${action}">${getKeybindLabel(action)}</button>`;
+        row.querySelector('.kb-btn').addEventListener('click', (e) => {
+            if (rebindTarget) document.querySelector(`.kb-btn[data-action="${rebindTarget}"]`)?.classList.remove('rebinding');
+            rebindTarget = action;
+            e.target.classList.add('rebinding');
+            e.target.innerText = '...';
+            document.getElementById('rebindHint').style.display = 'block';
+        });
+        grid.appendChild(row);
+    });
+    document.addEventListener('keydown', (e) => {
+        if (!rebindTarget) return;
+        e.preventDefault();
+        setKeybind(rebindTarget, e.code);
+        const btn = document.querySelector(`.kb-btn[data-action="${rebindTarget}"]`);
+        if (btn) { btn.innerText = getKeybindLabel(rebindTarget); btn.classList.remove('rebinding'); }
+        document.getElementById('rebindHint').style.display = 'none';
+        rebindTarget = null;
+    }, { capture: true });
+}
+
+export function openSettings() { if (settingsOpen) return; settingsOpen = true; document.getElementById('settingsOverlay')?.classList.remove('hidden'); document.exitPointerLock(); if (window.setPaused) window.setPaused(true); }
+export function closeSettings() { settingsOpen = false; document.getElementById('settingsOverlay')?.classList.add('hidden'); if (window.setPaused) window.setPaused(false); }
 export function isSettingsOpen() { return settingsOpen; }
 
 // ===== ARMORY =====
@@ -304,7 +414,8 @@ function buildArmoryWeaponList() {
     const list = document.getElementById('armoryWeaponList');
     if (!list) return;
     list.innerHTML = '';
-    Object.keys(CONFIG.weapons).filter(w => w !== 'pickaxe').forEach(wid => {
+    const weapons = ['pistol', 'assault', 'sniper', 'shotgun'];
+    weapons.forEach(wid => {
         const btn = document.createElement('button');
         btn.style.cssText = 'background:rgba(255,255,255,0.1); border:1px solid #00c8ff; border-radius:10px; padding:10px 20px; color:#fff; cursor:pointer';
         btn.innerText = CONFIG.weapons[wid].name;
@@ -327,7 +438,7 @@ function showWeaponUpgrades(wid) {
         panel.innerHTML += `
             <div style="background:rgba(255,255,255,0.05); padding:12px; border-radius:10px; margin-bottom:10px">
                 <div style="display:flex; justify-content:space-between; align-items:center">
-                    <span>${upg.label}: ${CONFIG.weapons[wid][upg.stat]} → ${tier < maxTier ? upg.levels[tier+1] : 'MAX'}</span>
+                    <span>${upg.label}: ${CONFIG.weapons[wid][upg.stat]} → ${tier < maxTier ? upg.levels[tier + 1] : 'MAX'}</span>
                     ${nextCost ? `<button class="upgrade-btn" data-weapon="${wid}" data-key="${key}">Upgrade - 💰${nextCost}</button>` : '<span style="color:#0f0">MAX</span>'}
                 </div>
             </div>`;
@@ -346,8 +457,8 @@ function showWeaponUpgrades(wid) {
     });
 }
 
-export function openArmory() { armoryOpen = true; buildArmoryWeaponList(); document.getElementById('armoryOverlay')?.classList.remove('hidden'); document.exitPointerLock(); window.setPaused?.(true); }
-export function closeArmory() { armoryOpen = false; document.getElementById('armoryOverlay')?.classList.add('hidden'); window.setPaused?.(false); }
+export function openArmory() { armoryOpen = true; buildArmoryWeaponList(); document.getElementById('armoryOverlay')?.classList.remove('hidden'); document.exitPointerLock(); if (window.setPaused) window.setPaused(true); }
+export function closeArmory() { armoryOpen = false; document.getElementById('armoryOverlay')?.classList.add('hidden'); if (window.setPaused) window.setPaused(false); }
 export function isArmoryOpen() { return armoryOpen; }
 
 // ===== LOCKER =====
@@ -358,24 +469,26 @@ function buildLockerMenu() {
     overlay.id = 'lockerOverlay';
     overlay.className = 'menu-overlay hidden';
     overlay.innerHTML = `
-        <div class="menu-window"><div class="menu-title">LOCKER</div>
-        <div class="setting-row"><label>Shirt Color</label><input type="color" id="shirtColorPicker" value="${COSMETICS.bodyColor}"></div>
-        <div class="setting-row"><label>Pants Color</label><input type="color" id="pantsColorPicker" value="${COSMETICS.accentColor}"></div>
-        <div class="setting-row"><label>Skin Tone</label><input type="color" id="skinColorPicker" value="${COSMETICS.headColor}"></div>
-        <div class="menu-footer"><button class="menu-btn primary" id="applyLocker">Apply</button><button class="menu-btn" id="closeLocker">Cancel</button></div></div>`;
+        <div class="menu-window">
+            <div class="menu-title">LOCKER</div>
+            <div class="setting-row"><label>Shirt Color</label><input type="color" id="shirtColorPicker" value="${COSMETICS.bodyColor}"></div>
+            <div class="setting-row"><label>Pants Color</label><input type="color" id="pantsColorPicker" value="${COSMETICS.accentColor}"></div>
+            <div class="setting-row"><label>Skin Tone</label><input type="color" id="skinColorPicker" value="${COSMETICS.headColor}"></div>
+            <div class="menu-footer"><button class="menu-btn primary" id="applyLocker">Apply</button><button class="menu-btn" id="closeLocker">Cancel</button></div>
+        </div>`;
     document.body.appendChild(overlay);
     document.getElementById('applyLocker')?.addEventListener('click', () => {
         COSMETICS.bodyColor = document.getElementById('shirtColorPicker').value;
         COSMETICS.accentColor = document.getElementById('pantsColorPicker').value;
         COSMETICS.headColor = document.getElementById('skinColorPicker').value;
-        window.applyCosmetics?.();
+        if (window.applyCosmetics) window.applyCosmetics();
         closeLocker();
     });
     document.getElementById('closeLocker')?.addEventListener('click', closeLocker);
 }
 
-export function openLocker() { lockerOpen = true; document.getElementById('lockerOverlay')?.classList.remove('hidden'); document.exitPointerLock(); window.setPaused?.(true); }
-export function closeLocker() { lockerOpen = false; document.getElementById('lockerOverlay')?.classList.add('hidden'); window.setPaused?.(false); }
+export function openLocker() { lockerOpen = true; document.getElementById('lockerOverlay')?.classList.remove('hidden'); document.exitPointerLock(); if (window.setPaused) window.setPaused(true); }
+export function closeLocker() { lockerOpen = false; document.getElementById('lockerOverlay')?.classList.add('hidden'); if (window.setPaused) window.setPaused(false); }
 export function isLockerOpen() { return lockerOpen; }
 
 // Expose functions for other files
