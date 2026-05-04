@@ -1115,3 +1115,160 @@ body {
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* Lobby Screen */
+.lobby-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: linear-gradient(135deg, #0a0a2a 0%, #1a1a4a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lobby-screen.hidden {
+    display: none;
+}
+
+.lobby-background {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 30%, rgba(0, 100, 200, 0.2) 0%, transparent 70%);
+}
+
+.lobby-content {
+    position: relative;
+    display: flex;
+    width: 100%;
+    max-width: 1300px;
+    height: 85%;
+    padding: 40px 50px;
+    gap: 50px;
+}
+
+.lobby-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 30px;
+}
+
+.lobby-logo h1 {
+    font-size: 48px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff, #ffaa44);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.lobby-stats {
+    display: flex;
+    gap: 30px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 15px 25px;
+    border-radius: 15px;
+}
+
+.lobby-stats .stat {
+    font-size: 16px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.lobby-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.lobby-character-container {
+    width: 350px;
+    height: 450px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 30px;
+    overflow: hidden;
+}
+
+.lobby-username {
+    margin-top: 15px;
+    font-size: 18px;
+    font-weight: bold;
+    background: linear-gradient(135deg, #fff, #ffaa44);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.lobby-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 25px;
+}
+
+.lobby-menu-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.lobby-menu-buttons .menu-btn {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.lobby-menu-buttons .menu-btn:hover {
+    background: rgba(0, 150, 200, 0.3);
+    border-color: #00ccff;
+    transform: scale(1.02);
+}
+
+.play-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #ffaa44, #ff6644);
+    border: none;
+    color: white;
+    padding: 16px;
+    border-radius: 40px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.play-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(255, 102, 68, 0.5);
+}
+
+.mode-select {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mode-option {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.mode-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
