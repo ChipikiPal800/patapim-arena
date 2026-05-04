@@ -456,3 +456,21 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
 
     animateWeapon(dt);
 }
+
+// Add this to weapons.js - attach weapon model to player hand
+export function attachWeaponToHand(playerRig, weaponId) {
+    if (!playerRig) return;
+    const rightHand = playerRig.children.find(c => c.position.x > 0.35 && c.position.y < 0.6);
+    if (!rightHand) return;
+    
+    // Remove old weapon
+    if (window.currentWeaponModel) {
+        rightHand.remove(window.currentWeaponModel);
+    }
+    
+    const weaponGroup = buildWeaponModel(weaponId);
+    weaponGroup.position.set(0.15, -0.05, 0.2);
+    weaponGroup.rotation.set(0.2, 0.1, 0.1);
+    rightHand.add(weaponGroup);
+    window.currentWeaponModel = weaponGroup;
+}
