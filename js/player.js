@@ -1,274 +1,244 @@
 import * as THREE from 'three';
 import { CONFIG, SETTINGS, COSMETICS } from './config.js';
 import { keybinds } from './keybinds.js';
+import { buildCharacter, animateIdle, animateWalk, animateJump, animateReset } from './character.js';
 
-export const input = {
-    forward: false, back: false, left: false, right: false,
-    jump: false, sprint: false, scope: false, shoot: false,
-    yaw: 0, pitch: 0, mouseDX: 0, mouseDY: 0
-};
+// ─── State ────────────────────────────────────────────────────────────────────
+const keys = { forward:false, back:false, left:false, right:false, sprint:false, jump:false };
+let yaw = 0, pitch = 0.18;
+let vVel = 0, grounded = true;
+let sprintPct = 100;
+let swingT = 0, idleT = 0;
+let buildMode = false;
 
-export const player = {
-    object: null, rig: null, camera: null,
-    velocity: new THREE.Vector3(),
-    yaw: 0, pitch: 0, health: 100, shield: 100, stamina: 100,
-    onGround: false, walkCycle: 0, speedSmooth: 0, coins: 0, alive: true,
-    targetFOV: 75, currentFOV: 75, aimBlend: 0, weaponModel: null
-};
+export let playerPos = new THREE.Vector3(0, CONFIG.player.height, 0);
 
-let buildModeActive = false;
+let charGroup, charRefs, gunSlot;
 
-// Build 1v1.lol style humanoid model (connected, realistic proportions)
-function buildPlayerModel() {
-    const root = new THREE.Group();
-    const rig = new THREE.Group();
-    root.add(rig);
-
-    const skinMat = new THREE.MeshStandardMaterial({ color: COSMETICS.skinColor || 0xfdd7a8, roughness: 0.3 });
-    const clothMat = new THREE.MeshStandardMaterial({ color: COSMETICS.bodyColor || 0x6da3d4, roughness: 0.5 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: COSMETICS.accentColor || 0x1a3550, roughness: 0.5 });
-    const bootMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
-    const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.4 });
-
-    // Torso (connected to hips)
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.4), clothMat);
-    torso.position.y = 0.85;
-    torso.castShadow = true;
-    rig.add(torso);
-
-    // Hips/lower body
-    const hips = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.45), pantsMat);
-    hips.position.y = 0.45;
-    hips.castShadow = true;
-    rig.add(hips);
-
-    // Legs (connected)
-    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), pantsMat);
-    leftLeg.position.set(-0.18, 0.2, 0);
-    leftLeg.castShadow = true;
-    rig.add(leftLeg);
-
-    const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), pantsMat);
-    rightLeg.position.set(0.18, 0.2, 0);
-    rightLeg.castShadow = true;
-    rig.add(rightLeg);
-
-    // Feet
-    const leftFoot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, 0.38), bootMat);
-    leftFoot.position.set(-0.18, -0.12, 0.05);
-    leftFoot.castShadow = true;
-    rig.add(leftFoot);
-
-    const rightFoot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, 0.38), bootMat);
-    rightFoot.position.set(0.18, -0.12, 0.05);
-    rightFoot.castShadow = true;
-    rig.add(rightFoot);
-
-    // Arms (connected at shoulders)
-    const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.6, 6), clothMat);
-    leftArm.position.set(-0.35, 1.15, 0);
-    leftArm.castShadow = true;
-    rig.add(leftArm);
-
-    const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.6, 6), clothMat);
-    rightArm.position.set(0.35, 1.15, 0);
-    rightArm.castShadow = true;
-    rig.add(rightArm);
-
-    // Forearms
-    const leftForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.5, 6), skinMat);
-    leftForearm.position.set(-0.36, 0.8, 0);
-    leftForearm.castShadow = true;
-    rig.add(leftForearm);
-
-    const rightForearm = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.5, 6), skinMat);
-    rightForearm.position.set(0.36, 0.8, 0);
-    rightForearm.castShadow = true;
-    rig.add(rightForearm);
-
-    // Hands
-    const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.2), skinMat);
-    leftHand.position.set(-0.38, 0.55, 0);
-    leftHand.castShadow = true;
-    rig.add(leftHand);
-
-    const rightHand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.2), skinMat);
-    rightHand.position.set(0.38, 0.55, 0);
-    rightHand.castShadow = true;
-    rig.add(rightHand);
-
-    // Neck
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.15, 6), skinMat);
-    neck.position.set(0, 1.45, 0);
-    neck.castShadow = true;
-    rig.add(neck);
-
-    // Head
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 24, 24), skinMat);
-    head.position.y = 1.65;
-    head.castShadow = true;
-    rig.add(head);
-
-    // Hair (simple helmet-like)
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.33, 16, 16), hairMat);
-    hair.position.y = 1.72;
-    hair.scale.set(1.05, 0.3, 1.05);
-    hair.castShadow = true;
-    rig.add(hair);
-
-    // Face visor (1v1.lol style)
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x335599, emissiveIntensity: 0.3 }));
-    visor.position.set(0, 1.64, 0.33);
-    rig.add(visor);
-
-    player.rig = rig;
-    return root;
-}
-
+// ─── Create model ─────────────────────────────────────────────────────────────
 export function createPlayerModel(scene) {
-    const model = buildPlayerModel();
-    model.position.set(0, 0, 0);
-    scene.add(model);
-    player.object = model;
-    return model;
+    const colors = {
+        skin:  parseInt(COSMETICS.skinColor.replace('#',''), 16),
+        shirt: parseInt(COSMETICS.shirtColor.replace('#',''), 16),
+        pants: parseInt(COSMETICS.pantsColor.replace('#',''), 16),
+    };
+    const { group, refs } = buildCharacter(colors);
+    charGroup = group;
+    charRefs  = refs;
+    gunSlot   = refs.gunSlot;
+    scene.add(charGroup);
+    return charGroup;
 }
 
-export function initPlayerControls(camera, domElement) {
-    player.camera = camera;
-    domElement.addEventListener('click', () => { if (!document.pointerLockElement) domElement.requestPointerLock(); });
-    document.addEventListener('mousemove', (e) => { if (document.pointerLockElement) { input.mouseDX += e.movementX; input.mouseDY += e.movementY; } });
-    document.addEventListener('mousedown', (e) => { if (!document.pointerLockElement) return; if (e.button === 0) input.shoot = true; if (e.button === 2) input.scope = true; });
-    document.addEventListener('mouseup', (e) => { if (e.button === 0) input.shoot = false; if (e.button === 2) input.scope = false; });
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.addEventListener('keydown', (e) => {
-        if (!document.pointerLockElement && e.code !== 'Escape') return;
-        if (e.code === keybinds.forward) input.forward = true;
-        if (e.code === keybinds.back) input.back = true;
-        if (e.code === keybinds.left) input.left = true;
-        if (e.code === keybinds.right) input.right = true;
-        if (e.code === keybinds.jump) input.jump = true;
-        if (e.code === keybinds.sprint) input.sprint = true;
-        if (e.code === keybinds.buildToggle) toggleBuildMode();
-        if (e.code === keybinds.pickaxe || e.code === 'Digit5' || e.code === 'KeyQ') {
-            if (window.switchWeaponTo) window.switchWeaponTo('pickaxe');
+export function getGunSlot() { return gunSlot; }
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+export function initControls(camera, domEl) {
+    domEl.addEventListener('click', () => domEl.requestPointerLock());
+
+    document.addEventListener('keydown', e => {
+        if (e.code === keybinds.forward) keys.forward = true;
+        if (e.code === keybinds.back)    keys.back    = true;
+        if (e.code === keybinds.left)    keys.left    = true;
+        if (e.code === keybinds.right)   keys.right   = true;
+        if (e.code === keybinds.sprint)  keys.sprint  = true;
+        if (e.code === keybinds.jump)  { keys.jump = true; e.preventDefault(); }
+        if (e.code === keybinds.buildToggle) {
+            buildMode = !buildMode;
+            if (window.onBuildModeToggle) window.onBuildModeToggle(buildMode);
         }
     });
-    document.addEventListener('keyup', (e) => {
-        if (e.code === keybinds.forward) input.forward = false;
-        if (e.code === keybinds.back) input.back = false;
-        if (e.code === keybinds.left) input.left = false;
-        if (e.code === keybinds.right) input.right = false;
-        if (e.code === keybinds.jump) input.jump = false;
-        if (e.code === keybinds.sprint) input.sprint = false;
+    document.addEventListener('keyup', e => {
+        if (e.code === keybinds.forward) keys.forward = false;
+        if (e.code === keybinds.back)    keys.back    = false;
+        if (e.code === keybinds.left)    keys.left    = false;
+        if (e.code === keybinds.right)   keys.right   = false;
+        if (e.code === keybinds.sprint)  keys.sprint  = false;
+        if (e.code === keybinds.jump)    keys.jump    = false;
+    });
+
+    domEl.addEventListener('mousemove', e => {
+        if (document.pointerLockElement !== domEl) return;
+        const s = CONFIG.player.mouseSensitivity * SETTINGS.sensitivity;
+        yaw   -= e.movementX * s;
+        const yMult = SETTINGS.invertY ? 1 : -1;
+        pitch += e.movementY * s * yMult;
+        pitch  = Math.max(-0.55, Math.min(0.55, pitch));
     });
 }
 
-function toggleBuildMode() { buildModeActive = !buildModeActive; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
-export function isBuildModeActive() { return buildModeActive; }
-export function setBuildModeActive(active) { buildModeActive = active; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
+// ─── Per-frame update ─────────────────────────────────────────────────────────
+export function updatePlayer(camera, dt, isScoped) {
+    const d = Math.min(dt, 0.033);
+    idleT += d;
 
-export function updateGunVisuals(weaponId) { /* Handled in weapons.js */ }
+    // Sprint
+    const sprinting = keys.sprint && sprintPct > 0 && grounded && !isScoped;
+    const speed = sprinting ? CONFIG.player.runSpeed : CONFIG.player.walkSpeed;
+    sprintPct = sprinting
+        ? Math.max(0, sprintPct - CONFIG.player.sprintDrain * d)
+        : Math.min(100, sprintPct + CONFIG.player.sprintRegen * d);
 
-export function applyCosmetics() {
-    if (!player.rig) return;
-    const skinColor = COSMETICS.skinColor || '#fdd7a8';
-    const clothColor = COSMETICS.bodyColor || '#6da3d4';
-    const pantsColor = COSMETICS.accentColor || '#1a3550';
-    player.rig.children.forEach(child => {
-        if (child.isMesh) {
-            if (child.position.y > 1.5 || child.geometry.type === 'SphereGeometry') child.material.color.set(skinColor);
-            else if (child.position.y < 0.6 && child.position.x !== 0) child.material.color.set(pantsColor);
-            else if (child.position.y < 0.3) child.material.color.set(0x2a2a2a);
-            else child.material.color.set(clothColor);
-        }
-    });
-}
+    // Jump
+    if (keys.jump && grounded) { vVel = CONFIG.player.jumpPower; grounded = false; }
 
-export function respawnPlayer() { player.health = CONFIG.player.health; player.shield = CONFIG.player.shield; player.stamina = 100; player.velocity.set(0, 0, 0); player.alive = true; }
+    // Gravity + vertical
+    vVel -= CONFIG.player.gravity * d;
+    playerPos.y += vVel * d;
+    if (playerPos.y <= CONFIG.player.height) {
+        playerPos.y = CONFIG.player.height;
+        vVel = 0; grounded = true;
+    } else { grounded = false; }
 
-const tmpForward = new THREE.Vector3();
-const tmpRight = new THREE.Vector3();
-const tmpMove = new THREE.Vector3();
+    // ── Directional move (correct WASD) ──────────────────────────────────────
+    // forward  = -sin(yaw) X, -cos(yaw) Z
+    // right    =  cos(yaw) X, -sin(yaw) Z
+    const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+    const rgt = new THREE.Vector3( Math.cos(yaw), 0, -Math.sin(yaw));
+    const dir = new THREE.Vector3();
+    if (keys.forward) dir.addScaledVector(fwd,  1);
+    if (keys.back)    dir.addScaledVector(fwd, -1);
+    if (keys.left)    dir.addScaledVector(rgt, -1); // A = strafe left  ✓
+    if (keys.right)   dir.addScaledVector(rgt,  1); // D = strafe right ✓
+    if (dir.length() > 0) dir.normalize();
+    playerPos.addScaledVector(dir, speed * d);
 
-export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped, getTerrainHeight, checkTreeCollision, collideWithBuilds) {
-    const dt = Math.min(deltaTime, 0.033);
-    const sens = CONFIG.player.mouseSensitivity * SETTINGS.sensitivity;
-    const scopeSens = player.aimBlend > 0.5 ? CONFIG.player.scopeSensitivityMultiplier : 1.0;
-    
-    player.yaw -= input.mouseDX * sens * scopeSens;
-    player.pitch -= input.mouseDY * sens * scopeSens * (SETTINGS.invertY ? -1 : 1);
-    player.pitch = Math.max(-Math.PI / 3, Math.min(Math.PI / 2.5, player.pitch));
-    input.mouseDX = 0; input.mouseDY = 0;
+    // Boundaries
+    const lim = CONFIG.world.groundSize / 2 - 4;
+    playerPos.x = Math.max(-lim, Math.min(lim, playerPos.x));
+    playerPos.z = Math.max(-lim, Math.min(lim, playerPos.z));
 
-    tmpForward.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
-    tmpRight.set(Math.sin(player.yaw + Math.PI / 2), 0, Math.cos(player.yaw + Math.PI / 2));
-    tmpMove.set(0, 0, 0);
-    if (input.forward) tmpMove.sub(tmpForward);
-    if (input.back) tmpMove.add(tmpForward);
-    if (input.left) tmpMove.sub(tmpRight);
-    if (input.right) tmpMove.add(tmpRight);
-    if (tmpMove.lengthSq() > 0) tmpMove.normalize();
-
-    let speed = CONFIG.player.walkSpeed;
-    const isSprinting = input.sprint && player.stamina > 0 && tmpMove.lengthSq() > 0 && !isScoped && !buildModeActive;
-    if (isSprinting) { speed = CONFIG.player.runSpeed; player.stamina = Math.max(0, player.stamina - CONFIG.player.sprintDrain * dt); }
-    else { player.stamina = Math.min(100, player.stamina + CONFIG.player.sprintRegen * dt); }
-    if (onSprintUpdate) onSprintUpdate(player.stamina);
-    if (player.aimBlend > 0.5) speed *= 0.55;
-
-    player.velocity.x = tmpMove.x * speed;
-    player.velocity.z = tmpMove.z * speed;
-    player.velocity.y -= CONFIG.player.gravity * dt;
-    if (input.jump && player.onGround && !isScoped && !buildModeActive) { player.velocity.y = CONFIG.player.jumpPower; player.onGround = false; }
-
-    let newPos = player.object.position.clone();
-    newPos.x += player.velocity.x * dt;
-    newPos.z += player.velocity.z * dt;
-    newPos.y += player.velocity.y * dt;
-
-    const terrainY = getTerrainHeight ? getTerrainHeight(newPos.x, newPos.z) : 0;
-    if (newPos.y <= terrainY) { newPos.y = terrainY; player.velocity.y = 0; player.onGround = true; }
-    else { player.onGround = false; }
-    
-    if (checkTreeCollision && checkTreeCollision(newPos.x, newPos.z, 0.5)) { newPos.x = player.object.position.x; newPos.z = player.object.position.z; }
-    if (collideWithBuilds) { const cr = collideWithBuilds(player.object.position, newPos, player.velocity); newPos.copy(cr.position); player.velocity.copy(cr.velocity); player.onGround = cr.onGround; }
-    
-    player.object.position.copy(newPos);
-    if (player.rig) { player.rig.rotation.y = player.yaw; animateBody(dt, tmpMove.lengthSq() > 0, speed); }
-
-    // Third-person camera
-    const camOffset = new THREE.Vector3(0, 1.3, 5.2);
-    const rotatedOffset = camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw))));
-    camera.position.copy(player.object.position).add(rotatedOffset);
-    camera.position.y += player.pitch * 1.0;
-    camera.lookAt(player.object.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
-
-    player.currentFOV += ((player.targetFOV || 75) - player.currentFOV) * dt * 12;
-    camera.fov = player.currentFOV;
-    camera.updateProjectionMatrix();
-    player.aimBlend += ((input.scope ? 1 : 0) - player.aimBlend) * dt * 10;
-    player.aimBlend = Math.min(1, Math.max(0, player.aimBlend));
-    return player.object.position.clone();
-}
-
-function animateBody(dt, moving, speed) {
-    const targetSpeed = moving ? speed / CONFIG.player.runSpeed : 0;
-    player.speedSmooth += (targetSpeed - player.speedSmooth) * dt * 10;
-    if (moving) player.walkCycle += dt * (8 + speed * 0.6);
-    else player.walkCycle += dt * 1.5;
-    
-    const cycle = player.walkCycle, intensity = player.speedSmooth;
-    const legSwing = Math.sin(cycle) * 0.9 * intensity;
-    const armSwing = Math.sin(cycle * 1.3) * 0.7 * intensity;
-    
-    if (player.rig) {
-        const leftLeg = player.rig.children.find(c => c.position.x < -0.15 && c.geometry?.parameters?.height > 0.6);
-        const rightLeg = player.rig.children.find(c => c.position.x > 0.15 && c.geometry?.parameters?.height > 0.6);
-        const leftArm = player.rig.children.find(c => c.position.x < -0.3 && c.geometry?.type === 'CylinderGeometry');
-        const rightArm = player.rig.children.find(c => c.position.x > 0.3 && c.geometry?.type === 'CylinderGeometry');
-        if (leftLeg) leftLeg.rotation.x = legSwing;
-        if (rightLeg) rightLeg.rotation.x = -legSwing;
-        if (leftArm) leftArm.rotation.z = armSwing - 0.2;
-        if (rightArm) rightArm.rotation.z = -armSwing - 0.2;
+    // ── Model ─────────────────────────────────────────────────────────────────
+    if (charGroup) {
+        charGroup.position.set(playerPos.x, 0, playerPos.z);
+        charGroup.rotation.y = yaw;
     }
+
+    // ── Animations ────────────────────────────────────────────────────────────
+    if (charRefs) {
+        const moving = dir.length() > 0.05 && grounded;
+        if (!grounded) {
+            animateJump(charRefs);
+        } else if (moving) {
+            swingT += d * (sprinting ? 18 : 12);
+            animateWalk(charRefs, swingT, sprinting);
+        } else {
+            animateReset(charRefs);
+            animateIdle(charRefs, idleT);
+        }
+        if (sprinting && charGroup) charGroup.rotation.z = -0.04;
+        else if (charGroup) charGroup.rotation.z *= 0.85;
+    }
+
+    // ── Third-person camera (over-the-shoulder) ───────────────────────────────
+    // Camera sits behind and above player, looking toward player's front-left
+    const camDist   = isScoped ? 3.5 : 5.5;
+    const camHeight = 2.4;
+    // Behind = opposite of fwd
+    const behindX = Math.sin(yaw) * camDist;
+    const behindZ = Math.cos(yaw) * camDist;
+    const targetCamPos = new THREE.Vector3(
+        playerPos.x + behindX,
+        playerPos.y + camHeight + pitch * 2.5,
+        playerPos.z + behindZ
+    );
+    camera.position.lerp(targetCamPos, 0.14);
+
+    // Look at: player head level, slightly pitched
+    const lookAt = new THREE.Vector3(
+        playerPos.x - Math.sin(yaw) * 1.5,
+        playerPos.y + 1.0 + pitch * 1.5,
+        playerPos.z - Math.cos(yaw) * 1.5
+    );
+    camera.lookAt(lookAt);
+
+    return playerPos.clone();
+}
+
+// ─── Gun visuals ──────────────────────────────────────────────────────────────
+export function updateGunVisuals(weaponId, gunColor) {
+    if (!gunSlot) return;
+    while (gunSlot.children.length) gunSlot.remove(gunSlot.children[0]);
+    if (weaponId === 'pickaxe') { buildPickaxe(gunSlot); return; }
+
+    const wp    = CONFIG.weapons[weaponId];
+    const color = gunColor ? parseInt(gunColor.replace('#',''), 16) : wp.color;
+    const mat   = c => new THREE.MeshLambertMaterial({ color: c });
+    const m     = mat(color);
+    const dark  = mat(0x1a1a1a);
+    const wood  = mat(0x7a4e28);
+
+    switch (weaponId) {
+        case 'pistol':  buildPistol(gunSlot, m, dark);  break;
+        case 'assault': buildAR(gunSlot, m, dark);       break;
+        case 'sniper':  buildSniper(gunSlot, m, dark, wood); break;
+        case 'shotgun': buildShotgun(gunSlot, m, dark, wood); break;
+    }
+}
+
+function addMesh(parent, geo, mat, x,y,z, rx=0,ry=0,rz=0) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x,y,z);
+    m.rotation.set(rx,ry,rz);
+    m.castShadow = true;
+    parent.add(m);
+    return m;
+}
+const box = (w,h,d) => new THREE.BoxGeometry(w,h,d);
+const cyl = (r1,r2,h,s=8) => new THREE.CylinderGeometry(r1,r2,h,s);
+
+function buildPickaxe(g) {
+    const m = new THREE.MeshLambertMaterial({ color:0x888888 });
+    const h = new THREE.MeshLambertMaterial({ color:0x554433 });
+    addMesh(g, box(0.06,0.65,0.06), h, 0,-0.1,0.12);
+    addMesh(g, box(0.28,0.06,0.06), m, 0.10,0.2,0.12);
+    addMesh(g, box(0.06,0.22,0.06), m, 0.22,0.26,0.12, 0,0,0.5);
+}
+function buildPistol(g, m, d) {
+    addMesh(g, box(0.10,0.20,0.12), d, 0,-0.06,0.1);
+    addMesh(g, box(0.32,0.09,0.09), m, 0.14,0.02,0.1);
+    addMesh(g, box(0.22,0.07,0.07), m, 0.10,0.06,0.1);
+}
+function buildAR(g, m, d) {
+    addMesh(g, box(0.58,0.10,0.10), m, 0.22,0,0.1);
+    addMesh(g, box(0.12,0.24,0.12), d, 0.04,-0.12,0.1);
+    addMesh(g, box(0.20,0.08,0.08), d, -0.22,-0.01,0.1);
+    addMesh(g, box(0.07,0.20,0.07), d, 0.09,-0.16,0.1);
+    addMesh(g, box(0.16,0.04,0.07), m, 0.22,0.08,0.1);
+}
+function buildSniper(g, m, d, wood) {
+    addMesh(g, box(0.88,0.08,0.08), m, 0.38,0,0.1);
+    addMesh(g, box(0.26,0.10,0.10), wood, -0.24,0,0.1);
+    addMesh(g, box(0.10,0.22,0.10), d, 0.02,-0.12,0.1);
+    const scopeM = new THREE.MeshLambertMaterial({ color:0x1a1a1a });
+    addMesh(g, cyl(0.038,0.038,0.36,8), scopeM, 0.18,0.10,0.1, 0,0,Math.PI/2);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.038,8), new THREE.MeshLambertMaterial({color:0x88aaff}));
+    lens.position.set(0.36,0.10,0.1); lens.rotation.y = Math.PI/2;
+    g.add(lens);
+}
+function buildShotgun(g, m, d, wood) {
+    addMesh(g, box(0.50,0.11,0.11), wood, 0.2,0,0.1);
+    addMesh(g, cyl(0.038,0.038,0.46,8), m, 0.24,0.05,0.08, 0,0,Math.PI/2);
+    addMesh(g, cyl(0.038,0.038,0.46,8), m, 0.24,-0.05,0.08, 0,0,Math.PI/2);
+    addMesh(g, box(0.22,0.12,0.12), wood, -0.18,0,0.1);
+}
+
+// ─── Respawn ──────────────────────────────────────────────────────────────────
+export function respawn() {
+    playerPos.set(0, CONFIG.player.height, 0);
+    vVel = 0; grounded = true;
+}
+
+export function isBuildMode() { return buildMode; }
+export function setBuildMode(val) {
+    buildMode = val;
+    if (window.onBuildModeToggle) window.onBuildModeToggle(buildMode);
+}
+
+export function applyCosmetics(scene) {
+    if (!charGroup || !scene) return;
+    scene.remove(charGroup);
+    createPlayerModel(scene);
+    // Re-add gun visuals if needed
+    if (window.currentWeaponId) updateGunVisuals(window.currentWeaponId);
 }
