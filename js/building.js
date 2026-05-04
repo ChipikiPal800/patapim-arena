@@ -1,23 +1,25 @@
 import * as THREE from 'three';
 import { CONFIG } from './config.js';
 
-// Build pieces are placed on a 4x4 grid
-const GRID_SIZE = CONFIG.building.pieceSize || 4;
+// Build pieces are placed on a 4x4 grid with discrete vertical levels
+const GRID = CONFIG.building.pieceSize || 4;
 const WALL_H = CONFIG.building.wallHeight || 4;
 
 export const buildState = {
     enabled: false,
-    selected: 'wall',
+    selected: 'wall',  // wall | ramp | floor | cone
     cooldown: 0,
-    pieces: [],
+    pieces: [],        // active build meshes
     placedSet: new Set(),
     preview: null,
     previewMaterial: null,
     previewBadMaterial: null,
-    materials: null
+    materials: null,
+    _geoCache: {}
 };
 
 function makeMaterials() {
+    // Wooden Fortnite-style material
     const woodMat = new THREE.MeshStandardMaterial({ 
         color: 0xc4a574, 
         roughness: 0.55, 
@@ -41,8 +43,9 @@ function makePreviewMat(valid) {
     });
 }
 
+// Each piece type has geometry centered on its anchor
 function makeGeometry(type) {
-    const s = GRID_SIZE;
+    const s = GRID;
     const h = WALL_H;
     
     if (type === 'wall') {
@@ -81,10 +84,9 @@ function makeGeometry(type) {
     return new THREE.BoxGeometry(1, 1, 1);
 }
 
-const geoCache = {};
 function getGeoCached(type) {
-    if (!geoCache[type]) geoCache[type] = makeGeometry(type);
-    return geoCache[type];
+    if (!buildState._geoCache[type]) buildState._geoCache[type] = makeGeometry(type);
+    return buildState._geoCache[type];
 }
 
 export function initBuilding(scene, getPlayerPos) {
@@ -96,44 +98,52 @@ export function initBuilding(scene, getPlayerPos) {
     preview.visible = false;
     scene.add(preview);
     buildState.preview = preview;
+    buildState._getPlayerPos = getPlayerPos;
 
+    // Keybinds for builds
     window.addEventListener('keydown', (e) => {
         if (e.code === 'KeyZ') setBuildMode('wall');
         if (e.code === 'KeyX') setBuildMode('ramp');
         if (e.code === 'KeyC') setBuildMode('floor');
         if (e.code === 'KeyV') setBuildMode('cone');
-        if (e.code === 'KeyE') placeBuild(scene, getPlayerPos);
+        if (e.code === 'KeyE') attemptPlaceBuild(scene);
         if (e.code === 'KeyQ') toggleBuildMode();
     });
     
-    setInterval(() => updateHologram(scene, getPlayerPos), 50);
+    setInterval(() => updateHologram(scene), 50);
 }
 
+// Called from main.js update loop
 export function updateBuilding(dt, scene) {
     buildState.cooldown = Math.max(0, buildState.cooldown - dt);
     
-    if (!buildState.enabled || !buildState.preview) {
+    if (!buildState.enabled) {
         if (buildState.preview) buildState.preview.visible = false;
         return;
     }
 }
 
-function getSnapPosition(getPlayerPos) {
-    const pos = getPlayerPos();
+function getSnapPosition() {
+    if (!buildState._getPlayerPos) return new THREE.Vector3(0, 0, 0);
+    const pos = buildState._getPlayerPos();
     return new THREE.Vector3(
-        Math.round(pos.x / GRID_SIZE) * GRID_SIZE,
+        Math.round(pos.x / GRID) * GRID,
         0,
-        Math.round(pos.z / GRID_SIZE) * GRID_SIZE
+        Math.round(pos.z / GRID) * GRID
     );
 }
 
-function placeBuild(scene, getPlayerPos) {
+function attemptPlaceBuild(scene) {
     if (!buildState.enabled) return;
     if (buildState.pieces.length >= CONFIG.building.maxBuilds) return;
     if (buildState.cooldown > 0) return;
     
-    const snap = getSnapPosition(getPlayerPos);
+    const snap = getSnapPosition();
     const type = buildState.selected;
+    const key = `${type}_${snap.x}_${snap.z}`;
+    
+    if (buildState.placedSet.has(key)) return;
+    
     const mesh = new THREE.Mesh(getGeoCached(type), buildState.materials[type]);
     
     switch(type) {
@@ -157,27 +167,30 @@ function placeBuild(scene, getPlayerPos) {
     mesh.userData = { 
         type: type, 
         health: CONFIG.building.health?.[type] || 120,
-        buildType: type
+        buildType: type,
+        key: key
     };
     
     scene.add(mesh);
     buildState.pieces.push(mesh);
-    buildState.placedSet.add(`${type}_${snap.x}_${snap.y}_${snap.z}`);
+    buildState.placedSet.add(key);
     buildState.cooldown = CONFIG.building.placeCooldown || 0.15;
 }
 
-function updateHologram(scene, getPlayerPos) {
+function updateHologram(scene) {
     if (!buildState.enabled) {
         if (buildState.preview) buildState.preview.visible = false;
         return;
     }
     
-    const snap = getSnapPosition(getPlayerPos);
+    const snap = getSnapPosition();
     const type = buildState.selected;
+    const key = `${type}_${snap.x}_${snap.z}`;
+    const valid = !buildState.placedSet.has(key);
     
     if (buildState.preview) {
         buildState.preview.geometry = getGeoCached(type);
-        buildState.preview.material = buildState.previewMaterial;
+        buildState.preview.material = valid ? buildState.previewMaterial : buildState.previewBadMaterial;
         
         switch(type) {
             case 'wall':
@@ -232,7 +245,7 @@ export function clearBuildables(scene) {
     buildState.placedSet.clear();
 }
 
-// Collision system
+// ─── COLLISION SYSTEM ─────────────────────────────────────────────────────────
 const pBox = new THREE.Box3();
 const pieceBox = new THREE.Box3();
 
@@ -246,7 +259,7 @@ export function collideWithBuilds(currentPos, nextPos, velocity) {
         onGround: false
     };
 
-    // Y-axis
+    // Y axis (vertical) - landing on floors/ramps
     let testPos = new THREE.Vector3(currentPos.x, result.position.y, currentPos.z);
     pBox.min.set(testPos.x - radius, testPos.y, testPos.z - radius);
     pBox.max.set(testPos.x + radius, testPos.y + height, testPos.z + radius);
@@ -267,7 +280,7 @@ export function collideWithBuilds(currentPos, nextPos, velocity) {
         }
     }
 
-    // X-axis
+    // X axis
     testPos.set(result.position.x, result.position.y, currentPos.z);
     pBox.min.set(testPos.x - radius, testPos.y, testPos.z - radius);
     pBox.max.set(testPos.x + radius, testPos.y + height, testPos.z + radius);
@@ -284,7 +297,7 @@ export function collideWithBuilds(currentPos, nextPos, velocity) {
         }
     }
 
-    // Z-axis
+    // Z axis
     testPos.set(result.position.x, result.position.y, result.position.z);
     pBox.min.set(testPos.x - radius, testPos.y, testPos.z - radius);
     pBox.max.set(testPos.x + radius, testPos.y + height, testPos.z + radius);
