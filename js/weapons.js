@@ -360,3 +360,21 @@ export function shootWeapon(raycaster, camera, scene, enemies, onKill, bulletTra
     weaponState.ammo[id]--;
     weaponState.cooldown = cfg.fireRate;
 }
+
+// Replace the switchWeapon function with this:
+export function switchWeapon(id) {
+    if (!CONFIG.weapons[id]) return;
+    weaponState.current = id;
+    weaponState.reloading = false;
+    weaponState.reloadTimer = 0;
+    if (weaponState.gunGroup) {
+        weaponState.gunGroup.clear();
+        const model = buildGunModel(id);
+        weaponState.gunGroup.add(model);
+        weaponState.gunModel = model;
+    }
+    // Update UI
+    if (window.updateWeaponUI) {
+        window.updateWeaponUI(id, weaponState.ammo[id], false);
+    }
+}
