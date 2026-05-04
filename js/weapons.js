@@ -13,7 +13,6 @@ function getAudio() {
     return audioCtx;
 }
 
-// Generate gunshot sounds programmatically
 function playGunshot(weaponId) {
     const ctx = getAudio();
     if (!ctx) return;
@@ -70,7 +69,6 @@ function playGunshot(weaponId) {
     osc.stop(now + config.decay * 1.5);
 }
 
-// State
 export const weaponState = {
     current: 'pistol',
     inventory: { pistol: true, assault: false, sniper: false, shotgun: false },
@@ -84,7 +82,6 @@ export const weaponState = {
     gunGroup: null
 };
 
-// Build a 3D gun model attached to camera
 function buildGunModel(weaponId) {
     const cfg = CONFIG.weapons[weaponId];
     const group = new THREE.Group();
@@ -163,12 +160,11 @@ export function setupWeapons(camera) {
     const group = new THREE.Group();
     camera.add(group);
     weaponState.gunGroup = group;
-    swapWeapon(weaponState.current);
+    switchWeapon(weaponState.current);
 }
 
-export function swapWeapon(id) {
+export function switchWeapon(id) {
     if (!CONFIG.weapons[id]) return;
-    if (!weaponState.inventory[id]) return;
     weaponState.current = id;
     weaponState.reloading = false;
     weaponState.reloadTimer = 0;
@@ -180,13 +176,38 @@ export function swapWeapon(id) {
     }
 }
 
+export function getCurrentWeapon() {
+    return weaponState.current;
+}
+
+export function refreshAmmoForUpgrade() {
+    const id = weaponState.current;
+    const cfg = CONFIG.weapons[id];
+    if (weaponState.ammo[id] > cfg.ammoPerMag) {
+        weaponState.ammo[id] = cfg.ammoPerMag;
+    }
+}
+
+export function startReload() {
+    const id = weaponState.current;
+    const cfg = CONFIG.weapons[id];
+    if (weaponState.reloading) return;
+    if (weaponState.ammo[id] >= cfg.ammoPerMag) return;
+    if (weaponState.reserveAmmo[id] <= 0) return;
+    weaponState.reloading = true;
+    weaponState.reloadTimer = cfg.reloadTime;
+}
+
+export function reloadWeapon() {
+    startReload();
+}
+
 const tmpDir = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 
 export function updateWeapons(dt, scene, enemies, onKill, builds) {
     weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
 
-    // Reload
     if (weaponState.reloading) {
         weaponState.reloadTimer -= dt;
         if (weaponState.reloadTimer <= 0) {
@@ -200,12 +221,10 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
         }
     }
 
-    // Fire
     if (input.shoot && !weaponState.reloading && weaponState.cooldown <= 0) {
         const id = weaponState.current;
         const cfg = CONFIG.weapons[id];
         if (weaponState.ammo[id] > 0) {
-            // FIXED: Pass builds to fire()
             fire(scene, enemies, id, cfg, onKill, builds);
             weaponState.ammo[id]--;
             weaponState.cooldown = cfg.fireRate;
@@ -217,33 +236,41 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
     animateGun(dt);
 }
 
+export function updateWeaponCooldown(dt) {
+    weaponState.cooldown = Math.max(0, weaponState.cooldown - dt);
+}
+
 function fire(scene, enemies, id, cfg, onKill, builds) {
     playGunshot(id);
 
-    // Apply recoil to camera
     player.pitch += cfg.recoilV * (0.7 + Math.random() * 0.6);
     player.yaw += (Math.random() - 0.5) * cfg.recoilH * 2;
     
-    // Visual gun kick
     if (weaponState.gunModel) {
         weaponState.gunModel.userData = weaponState.gunModel.userData || {};
         weaponState.gunModel.userData.kick = (weaponState.gunModel.userData.kick || 0) + 1;
     }
 
-    // Muzzle flash
-    spawnMuzzleFlash(scene);
+    const flash = new THREE.PointLight(0xffaa44, 6, 4);
+    if (weaponState.gunModel) {
+        weaponState.gunModel.add(flash);
+        flash.position.set(0, 0.04, -0.85);
+        setTimeout(() => {
+            if (weaponState.gunModel) weaponState.gunModel.remove(flash);
+            flash.dispose?.();
+        }, 50);
+    }
 
     if (id === 'shotgun') {
-        // 8 pellets with spread
         const pellets = cfg.pellets || 8;
-        const spread = 0.12; // Fixed spread value
+        const spread = cfg.spread || 0.12;
         for (let i = 0; i < pellets; i++) {
             const sx = (Math.random() - 0.5) * spread;
             const sy = (Math.random() - 0.5) * spread;
             castBullet(scene, enemies, cfg.damage, cfg.range, sx, sy, onKill, builds);
         }
     } else {
-        const inaccuracy = player.aimBlend > 0.5 ? 0.005 : 0.02;
+        const inaccuracy = (player.aimBlend || 0) > 0.5 ? 0.005 : 0.02;
         const sx = (Math.random() - 0.5) * inaccuracy;
         const sy = (Math.random() - 0.5) * inaccuracy;
         castBullet(scene, enemies, cfg.damage, cfg.range, sx, sy, onKill, builds);
@@ -263,11 +290,10 @@ function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, bui
     const intersects = raycaster.intersectObjects(enemies, true);
     let firstHit = intersects[0];
 
-    // Bullets collide with builds
     if (builds && builds.length > 0) {
         const buildHits = raycaster.intersectObjects(builds, true);
         if (buildHits[0] && (!firstHit || buildHits[0].distance < firstHit.distance)) {
-            firstHit = null; // Bullet stopped by build
+            firstHit = null;
         }
     }
 
@@ -281,27 +307,6 @@ function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, bui
     }
 }
 
-function spawnMuzzleFlash(scene) {
-    if (!weaponState.gunModel) return;
-    const flash = new THREE.PointLight(0xffaa44, 6, 4);
-    weaponState.gunModel.add(flash);
-    flash.position.set(0, 0.04, -0.85);
-    setTimeout(() => {
-        if (weaponState.gunModel) weaponState.gunModel.remove(flash);
-        flash.dispose?.();
-    }, 50);
-}
-
-export function startReload() {
-    const id = weaponState.current;
-    const cfg = CONFIG.weapons[id];
-    if (weaponState.reloading) return;
-    if (weaponState.ammo[id] >= cfg.ammoPerMag) return;
-    if (weaponState.reserveAmmo[id] <= 0) return;
-    weaponState.reloading = true;
-    weaponState.reloadTimer = cfg.reloadTime;
-}
-
 function animateGun(dt) {
     if (!weaponState.gunModel) return;
     const m = weaponState.gunModel;
@@ -312,19 +317,19 @@ function animateGun(dt) {
 
     const speed = player.speedSmooth || 0;
     const cycle = player.walkCycle || 0;
-    const bobX = Math.sin(cycle) * 0.02 * speed * (1 - player.aimBlend);
-    const bobY = Math.abs(Math.sin(cycle * 2)) * 0.025 * speed * (1 - player.aimBlend);
+    const bobX = Math.sin(cycle) * 0.02 * speed * (1 - (player.aimBlend || 0));
+    const bobY = Math.abs(Math.sin(cycle * 2)) * 0.025 * speed * (1 - (player.aimBlend || 0));
 
-    const baseX = THREE.MathUtils.lerp(0.2, 0, player.aimBlend);
-    const baseY = THREE.MathUtils.lerp(-0.18, -0.13, player.aimBlend);
-    const baseZ = THREE.MathUtils.lerp(-0.4, -0.35, player.aimBlend);
+    const baseX = THREE.MathUtils.lerp(0.2, 0, player.aimBlend || 0);
+    const baseY = THREE.MathUtils.lerp(-0.18, -0.13, player.aimBlend || 0);
+    const baseZ = THREE.MathUtils.lerp(-0.4, -0.35, player.aimBlend || 0);
 
     m.position.x = baseX + bobX;
     m.position.y = baseY + bobY;
     m.position.z = baseZ + ud.kick * 0.05;
 
     m.rotation.x = -ud.kick * 0.15;
-    m.rotation.y = THREE.MathUtils.lerp(-0.05, 0, player.aimBlend);
+    m.rotation.y = THREE.MathUtils.lerp(-0.05, 0, player.aimBlend || 0);
 
     if (weaponState.reloading) {
         const cfg = CONFIG.weapons[weaponState.current];
@@ -335,5 +340,23 @@ function animateGun(dt) {
     }
 
     const cfg = CONFIG.weapons[weaponState.current];
-    player.targetFOV = input.scope ? (75 / cfg.scopeZoom) : 75;
+    if (player.targetFOV !== undefined) {
+        player.targetFOV = input.scope ? (75 / cfg.scopeZoom) : 75;
+    }
+}
+
+export function shootWeapon(raycaster, camera, scene, enemies, onKill, bulletTrails, builds) {
+    // This is a wrapper for compatibility with main.js
+    const id = weaponState.current;
+    const cfg = CONFIG.weapons[id];
+    if (weaponState.cooldown > 0) return;
+    if (weaponState.reloading) return;
+    if (weaponState.ammo[id] <= 0) {
+        startReload();
+        return;
+    }
+    
+    fire(scene, enemies, id, cfg, onKill, builds);
+    weaponState.ammo[id]--;
+    weaponState.cooldown = cfg.fireRate;
 }
