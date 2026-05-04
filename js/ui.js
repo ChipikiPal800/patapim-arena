@@ -233,7 +233,6 @@ export function updateTimeOfDayUI(timeOfDay, isNight) {
 
 // ===== LOBBY SCREEN (Full Screen, Centered Character) =====
 let lobbyScene, lobbyCamera, lobbyRenderer, lobbyCharacter;
-let lobbyAnimationId;
 
 function buildLobbyScreen() {
     if (document.getElementById('lobbyScreen')) return;
@@ -262,10 +261,8 @@ function buildLobbyScreen() {
             <div class="lobby-right">
                 <div class="lobby-menu-buttons">
                     <button class="menu-btn" id="lobbyLockerBtn">👕 LOCKER</button>
-                    <button class="menu-btn" id="lobbyShopBtn">🛒 SHOP</button>
-                    <button class="menu-btn" id="lobbyBattlePassBtn">⭐ BATTLE PASS</button>
-                    <button class="menu-btn" id="lobbySettingsBtn">⚙️ SETTINGS</button>
                     <button class="menu-btn" id="lobbyArmoryBtn">🔫 ARMORY</button>
+                    <button class="menu-btn" id="lobbySettingsBtn">⚙️ SETTINGS</button>
                 </div>
                 <div class="lobby-play">
                     <button class="play-btn" id="playBtn">▶ PLAY!</button>
@@ -280,17 +277,27 @@ function buildLobbyScreen() {
     `;
     document.body.appendChild(lobby);
     
-    // Setup 3D character preview
-    setupLobbyCharacter();
+    // Setup 3D character preview after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        setupLobbyCharacter();
+    }, 100);
     
     // Event listeners
-    document.getElementById('lobbySettingsBtn')?.addEventListener('click', () => openSettings());
-    document.getElementById('lobbyArmoryBtn')?.addEventListener('click', () => openArmory());
-    document.getElementById('lobbyLockerBtn')?.addEventListener('click', () => openLocker());
-    document.getElementById('playBtn')?.addEventListener('click', () => {
-        const modeSelect = document.getElementById('modeSelect');
-        if (modeSelect) modeSelect.style.display = modeSelect.style.display === 'none' ? 'flex' : 'none';
-    });
+    const settingsBtn = document.getElementById('lobbySettingsBtn');
+    const armoryBtn = document.getElementById('lobbyArmoryBtn');
+    const lockerBtn = document.getElementById('lobbyLockerBtn');
+    const playBtn = document.getElementById('playBtn');
+    
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openSettings());
+    if (armoryBtn) armoryBtn.addEventListener('click', () => openArmory());
+    if (lockerBtn) lockerBtn.addEventListener('click', () => openLocker());
+    if (playBtn) {
+        playBtn.addEventListener('click', () => {
+            const modeSelect = document.getElementById('modeSelect');
+            if (modeSelect) modeSelect.style.display = modeSelect.style.display === 'none' ? 'flex' : 'none';
+        });
+    }
+    
     document.querySelectorAll('.mode-option:not(.disabled)').forEach(btn => {
         btn.addEventListener('click', () => {
             const mode = btn.dataset.mode;
@@ -303,13 +310,19 @@ function buildLobbyScreen() {
 
 function setupLobbyCharacter() {
     const container = document.getElementById('lobbyCharacterContainer');
-    if (!container) return;
+    if (!container) {
+        console.warn('Lobby character container not found');
+        return;
+    }
+    
+    // Clear any existing content
+    container.innerHTML = '';
     
     lobbyScene = new THREE.Scene();
     lobbyScene.background = new THREE.Color(0x0a0a2a);
     
-    lobbyCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    lobbyCamera.position.set(0, 1.5, 3.5);
+    lobbyCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+    lobbyCamera.position.set(0, 1.2, 3.2);
     lobbyCamera.lookAt(0, 1, 0);
     
     lobbyRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -317,43 +330,42 @@ function setupLobbyCharacter() {
     lobbyRenderer.setClearColor(0x0a0a2a);
     container.appendChild(lobbyRenderer.domElement);
     
-    // Lighting for lobby character
+    // Lighting
     const ambient = new THREE.AmbientLight(0x404060);
     lobbyScene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-    dirLight.position.set(2, 5, 3);
-    lobbyScene.add(dirLight);
-    const backLight = new THREE.PointLight(0x4466aa, 0.5);
-    backLight.position.set(0, 2, -2);
-    lobbyScene.add(backLight);
-    const fillLight = new THREE.PointLight(0xffaa66, 0.3);
-    fillLight.position.set(1, 1, 2);
+    
+    const mainLight = new THREE.DirectionalLight(0xffffff, 1);
+    mainLight.position.set(2, 5, 3);
+    lobbyScene.add(mainLight);
+    
+    const fillLight = new THREE.PointLight(0x4466aa, 0.5);
+    fillLight.position.set(0, 2, 2);
     lobbyScene.add(fillLight);
     
-    // Create a detailed stylized character for lobby
+    const backLight = new THREE.PointLight(0xffaa66, 0.3);
+    backLight.position.set(0, 1.5, -2);
+    lobbyScene.add(backLight);
+    
+    // Create character
     const characterGroup = new THREE.Group();
     
-    // Body
     const bodyMat = new THREE.MeshStandardMaterial({ color: COSMETICS.bodyColor || 0x6da3d4 });
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.4), bodyMat);
     body.position.y = 0.85;
     body.castShadow = true;
     characterGroup.add(body);
     
-    // Head
     const headMat = new THREE.MeshStandardMaterial({ color: COSMETICS.headColor || 0xfdd7a8 });
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 32, 32), headMat);
     head.position.y = 1.65;
     head.castShadow = true;
     characterGroup.add(head);
     
-    // Visor (1v1.lol style)
     const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x335599 });
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.12, 0.05), visorMat);
     visor.position.set(0, 1.64, 0.33);
     characterGroup.add(visor);
     
-    // Legs
     const pantsMat = new THREE.MeshStandardMaterial({ color: COSMETICS.accentColor || 0x1a3550 });
     const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.7, 0.26), pantsMat);
     leftLeg.position.set(-0.18, 0.45, 0);
@@ -364,7 +376,6 @@ function setupLobbyCharacter() {
     rightLeg.castShadow = true;
     characterGroup.add(rightLeg);
     
-    // Arms
     const armMat = new THREE.MeshStandardMaterial({ color: COSMETICS.bodyColor || 0x6da3d4 });
     const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.6, 6), armMat);
     leftArm.position.set(-0.35, 1.15, 0);
@@ -378,28 +389,14 @@ function setupLobbyCharacter() {
     lobbyCharacter = characterGroup;
     lobbyScene.add(lobbyCharacter);
     
-    // Add floating particles
-    const particleCount = 200;
-    const particleGeometry = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-        particlePositions[i * 3] = (Math.random() - 0.5) * 12;
-        particlePositions[i * 3 + 1] = Math.random() * 5;
-        particlePositions[i * 3 + 2] = (Math.random() - 0.5) * 10 - 3;
-    }
-    particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const particleMat = new THREE.PointsMaterial({ color: 0x44aaff, size: 0.04 });
-    const particles = new THREE.Points(particleGeometry, particleMat);
-    lobbyScene.add(particles);
-    
-    // Animate lobby character
+    // Animation loop
     let time = 0;
     function animateLobby() {
         requestAnimationFrame(animateLobby);
-        time += 0.008;
+        time += 0.01;
         if (lobbyCharacter) {
             lobbyCharacter.rotation.y = Math.sin(time) * 0.3;
-            lobbyCharacter.position.y = Math.sin(time * 1.5) * 0.02;
+            lobbyCharacter.position.y = Math.sin(time * 1.5) * 0.03;
         }
         if (lobbyRenderer && lobbyCamera) {
             lobbyRenderer.render(lobbyScene, lobbyCamera);
@@ -410,7 +407,6 @@ function setupLobbyCharacter() {
 
 export function updateLobbyCharacter() {
     if (!lobbyCharacter) return;
-    // Update character colors from COSMETICS
     lobbyCharacter.children.forEach(child => {
         if (child.isMesh) {
             if (child.position.y > 1.5) child.material.color.set(COSMETICS.headColor || 0xfdd7a8);
@@ -432,6 +428,13 @@ export function showLobby() {
     if (weapon) weapon.style.display = 'none';
     if (coins) coins.style.display = 'none';
     if (cross) cross.style.display = 'none';
+    
+    // Re-render lobby character
+    setTimeout(() => {
+        if (lobbyRenderer && lobbyCamera && lobbyScene) {
+            lobbyRenderer.render(lobbyScene, lobbyCamera);
+        }
+    }, 50);
 }
 
 export function hideLobby() {
