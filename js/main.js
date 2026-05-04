@@ -5,7 +5,7 @@ import {
     createPlayerModel, initPlayerControls, updatePlayerMovement,
     updateGunVisuals, respawnPlayer, isBuildModeActive, setBuildModeActive, applyCosmetics
 } from './player.js';
-import { switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown, getCurrentWeapon, refreshAmmoForUpgrade } from './weapons.js';
+import { switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown, getCurrentWeapon, refreshAmmoForUpgrade, weaponState } from './weapons.js';
 import { createZombieEnemy, createDummyEnemy, updateEnemies, spawnWave, updateDeathParticles } from './enemies.js';
 import { initBuilding, setBuildMode, getCurrentBuildMode, clearBuildables, getBuildPieces, collideWithBuilds } from './building.js';
 import {
@@ -18,7 +18,7 @@ import {
 
 applyUpgrades();
 
-// Expose globals
+// ─── EXPOSE GLOBALS FOR UI BUTTONS ───────────────────────────────────────────
 window.updateWeaponUI = updateWeaponUI;
 window.showDamageFlash = showDamageFlash;
 window.updateGunVisuals = updateGunVisuals;
@@ -28,8 +28,28 @@ window.refreshAmmoForUpgrade = refreshAmmoForUpgrade;
 window.getCurrentWeaponId = getCurrentWeapon;
 window.isBuildModeActive = isBuildModeActive;
 window.setBuildMode = setBuildMode;
+window.setBuildModeActive = setBuildModeActive;
+window.switchWeaponTo = switchWeapon;
+window.setPaused = (paused) => { window.gamePaused = paused; };
+window.getCoins = () => playerCoins;
+window.spendCoins = (amount) => { playerCoins -= amount; updateUI(playerHealth, playerShield, playerCoins); };
+window.applyShadowSettings = (level) => {
+    window.currentShadowLevel = level;
+    if (level === 'off') renderer.shadowMap.enabled = false;
+    else {
+        renderer.shadowMap.enabled = true;
+        const shadowSize = level === 'high' ? 2048 : 512;
+        mainLight.shadow.mapSize.width = shadowSize;
+        mainLight.shadow.mapSize.height = shadowSize;
+    }
+};
+
 window.gameStarted = false;
 window.currentGameMode = 'zombies';
+window.gamePaused = false;
+let playerCoins = 0;
+let playerHealth = CONFIG.player.health;
+let playerShield = CONFIG.player.shield;
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -52,12 +72,12 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ─── Audio Context for Sounds ────────────────────────────────────────────────
+// ─── Audio Context ────────────────────────────────────────────────────────────
 let globalAudioCtx = null;
 function getGlobalAudio() {
     if (!globalAudioCtx) {
         try { globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-        catch(e) { return null; }
+        catch (e) { return null; }
     }
     return globalAudioCtx;
 }
@@ -71,12 +91,10 @@ let lastTimeUpdate = performance.now();
 function updateTimeOfDay(deltaSec) {
     timeOfDay += deltaSec / DAY_CYCLE_DURATION;
     if (timeOfDay >= 1) timeOfDay -= 1;
-    
     const sunAngle = (timeOfDay - 0.25) * Math.PI * 2;
     const sunHeight = Math.sin(sunAngle);
     const isNight = sunHeight < -0.2;
     const intensity = Math.max(0.15, Math.min(1.2, (sunHeight + 0.5) * 1.2));
-    
     if (moonLight) moonLight.intensity = isNight ? 0.8 : 0.2;
     if (mainLight) {
         mainLight.intensity = intensity * 0.8;
@@ -131,11 +149,9 @@ function createFlashlight() {
     spot.shadow.mapSize.height = 512;
     spot.visible = false;
     scene.add(spot);
-    
     const fill = new THREE.PointLight(0xffaa66, 0.3, 18);
     fill.visible = false;
     scene.add(fill);
-    
     return { spot, fill };
 }
 
@@ -144,7 +160,6 @@ function toggleFlashlight() {
     if (flashlightSpot) flashlightSpot.visible = flashlightActive;
     if (flashlightFill) flashlightFill.visible = flashlightActive;
     updateFlashlightUI(flashlightActive);
-    
     const ctx = getGlobalAudio();
     if (ctx && ctx.state !== 'closed') {
         if (ctx.state === 'suspended') ctx.resume();
@@ -159,6 +174,7 @@ function toggleFlashlight() {
         osc.stop(ctx.currentTime + 0.08);
     }
 }
+window.toggleFlashlight = toggleFlashlight;
 
 function updateFlashlightPosition(cameraPos, cameraDir) {
     if (!flashlightSpot) return;
@@ -178,17 +194,12 @@ function checkCaveProximity(playerPos) {
     for (const cave of cavesList) {
         const dx = playerPos.x - cave.position.x;
         const dz = playerPos.z - cave.position.z;
-        const dist = Math.sqrt(dx*dx + dz*dz);
-        if (dist < cave.radius) {
-            inCave = true;
-            break;
-        }
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < cave.radius) { inCave = true; break; }
     }
-    
     if (inCave !== isInCave) {
         isInCave = inCave;
         updateCaveIndicatorUI(isInCave);
-        
         const ctx = getGlobalAudio();
         if (ctx) {
             if (ctx.state === 'suspended') ctx.resume();
@@ -197,9 +208,7 @@ function checkCaveProximity(playerPos) {
                     const bufferSize = ctx.sampleRate * 2;
                     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
                     const data = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) {
-                        data[i] = (Math.random() * 2 - 1) * 0.15;
-                    }
+                    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.15;
                     const src = ctx.createBufferSource();
                     src.buffer = buffer;
                     src.loop = true;
@@ -214,11 +223,7 @@ function checkCaveProximity(playerPos) {
             } else {
                 if (caveAmbienceGain) {
                     caveAmbienceGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1);
-                    setTimeout(() => {
-                        if (caveAmbienceNode) caveAmbienceNode.stop();
-                        caveAmbienceNode = null;
-                        caveAmbienceGain = null;
-                    }, 1000);
+                    setTimeout(() => { if (caveAmbienceNode) caveAmbienceNode.stop(); caveAmbienceNode = null; caveAmbienceGain = null; }, 1000);
                 }
             }
         }
@@ -234,8 +239,8 @@ function getTerrainHeight(x, z) {
     if (!terrainHeightmap) return 0;
     const dim = terrainHeightmap.length;
     const size = terrainHeightmap.size || 1200;
-    const ix = Math.floor((x + size/2) / 4);
-    const iz = Math.floor((z + size/2) / 4);
+    const ix = Math.floor((x + size / 2) / 4);
+    const iz = Math.floor((z + size / 2) / 4);
     if (ix < 0 || ix >= dim || iz < 0 || iz >= dim) return -1;
     return terrainHeightmap[ix][iz];
 }
@@ -244,12 +249,12 @@ function checkTreeCollision(x, z, radius) {
     for (const tree of treeColliders) {
         const dx = x - tree.x;
         const dz = z - tree.z;
-        if (Math.sqrt(dx*dx + dz*dz) < radius + tree.radius) return true;
+        if (Math.sqrt(dx * dx + dz * dz) < radius + tree.radius) return true;
     }
     return false;
 }
 
-// ─── Map Generators ──────────────────────────────────────────────────────────
+// ─── Map Generators (Simplified for brevity) ─────────────────────────────────
 const FOREST_SIZE = 1200;
 const DESERT_SIZE = 400;
 
@@ -259,13 +264,13 @@ function generateForestMap() {
     heightmap.size = FOREST_SIZE;
     for (let x = 0; x < dim; x++) {
         for (let z = 0; z < dim; z++) {
-            const worldX = (x - dim/2) * 4;
-            const worldZ = (z - dim/2) * 4;
+            const worldX = (x - dim / 2) * 4;
+            const worldZ = (z - dim / 2) * 4;
             const h1 = Math.sin(worldX * 0.03) * Math.cos(worldZ * 0.03) * 4;
             const h2 = Math.sin(worldX * 0.08 + 1.2) * Math.sin(worldZ * 0.07) * 3;
             const h3 = Math.sin(worldX * 0.12 * worldZ * 0.12) * 2;
             let height = h1 + h2 + h3;
-            const dist = Math.sqrt(worldX*worldX + worldZ*worldZ);
+            const dist = Math.sqrt(worldX * worldX + worldZ * worldZ);
             if (dist < 60) height -= Math.sin(dist * 0.08) * 2.5;
             heightmap[x][z] = Math.max(-2, Math.min(12, height));
         }
@@ -279,8 +284,8 @@ function generateDesertMap() {
     heightmap.size = DESERT_SIZE;
     for (let x = 0; x < dim; x++) {
         for (let z = 0; z < dim; z++) {
-            const worldX = (x - dim/2) * 4;
-            const worldZ = (z - dim/2) * 4;
+            const worldX = (x - dim / 2) * 4;
+            const worldZ = (z - dim / 2) * 4;
             const dune = Math.sin(worldX * 0.04) * Math.sin(worldZ * 0.04) * 3;
             const hill = Math.max(0, Math.sin(worldX * 0.07) * Math.sin(worldZ * 0.07)) * 4;
             let height = dune + hill;
@@ -298,12 +303,10 @@ function createGround(heightmap, isDesert = false) {
     const positions = geometry.attributes.position.array;
     for (let i = 0; i < positions.length; i += 3) {
         const x = positions[i];
-        const z = positions[i+2];
-        const ix = Math.floor((x + size/2) / 4);
-        const iz = Math.floor((z + size/2) / 4);
-        if (ix >= 0 && ix < dim && iz >= 0 && iz < dim) {
-            positions[i+1] = heightmap[ix][iz];
-        }
+        const z = positions[i + 2];
+        const ix = Math.floor((x + size / 2) / 4);
+        const iz = Math.floor((z + size / 2) / 4);
+        if (ix >= 0 && ix < dim && iz >= 0 && iz < dim) positions[i + 1] = heightmap[ix][iz];
     }
     geometry.computeVertexNormals();
     const material = new THREE.MeshStandardMaterial({ color: isDesert ? 0xc2a575 : 0x4a7a3a, roughness: 0.85, side: THREE.DoubleSide });
@@ -314,197 +317,19 @@ function createGround(heightmap, isDesert = false) {
     return ground;
 }
 
-function createTree(x, z, height) {
-    const group = new THREE.Group();
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a });
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x3a7a2a });
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.0, 2.0, 6), trunkMat);
-    trunk.position.y = 1.0;
-    trunk.castShadow = true;
-    group.add(trunk);
-    const foliage1 = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.3, 8), foliageMat);
-    foliage1.position.y = 2.1;
-    foliage1.castShadow = true;
-    group.add(foliage1);
-    const foliage2 = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.1, 8), foliageMat);
-    foliage2.position.y = 3.0;
-    foliage2.castShadow = true;
-    group.add(foliage2);
-    group.position.set(x, height, z);
-    treeColliders.push({ x, z, radius: 0.8 });
-    return group;
-}
-
-function generateTrees(heightmap) {
-    const size = heightmap.size;
-    const radius = size / 2 - 20;
-    for (let i = 0; i < 1200; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = 25 + Math.random() * radius;
-        const x = Math.cos(angle) * r;
-        const z = Math.sin(angle) * r;
-        if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
-        const ix = Math.floor((x + size/2) / 4);
-        const iz = Math.floor((z + size/2) / 4);
-        if (ix < 0 || ix >= heightmap.length) continue;
-        const y = heightmap[ix][iz];
-        if (y < 0) continue;
-        let tooClose = false;
-        for (const t of treeColliders) {
-            if (Math.hypot(x - t.x, z - t.z) < 6) { tooClose = true; break; }
-        }
-        if (!tooClose) scene.add(createTree(x, z, y));
-    }
-}
-
-function createCactus(x, z, height) {
-    const group = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x5a7a3a });
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.5, 6), mat);
-    trunk.position.y = 0.75;
-    trunk.castShadow = true;
-    group.add(trunk);
-    group.position.set(x, height, z);
-    return group;
-}
-
-function generateCacti(heightmap) {
-    const size = heightmap.size;
-    for (let i = 0; i < 400; i++) {
-        const x = (Math.random() - 0.5) * (size - 40);
-        const z = (Math.random() - 0.5) * (size - 40);
-        const ix = Math.floor((x + size/2) / 4);
-        const iz = Math.floor((z + size/2) / 4);
-        if (ix < 0 || ix >= heightmap.length) continue;
-        const y = heightmap[ix][iz];
-        if (y > -0.5 && y < 3) scene.add(createCactus(x, z, y));
-    }
-}
-
-function createStalactite(x, y, z) {
-    const group = new THREE.Group();
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6a6a7a });
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1.2, 5), stoneMat);
-    spike.position.y = -0.6;
-    spike.castShadow = true;
-    group.add(spike);
-    group.position.set(x, y, z);
-    return group;
-}
-
-function createStalagmite(x, y, z) {
-    const group = new THREE.Group();
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6a6a7a });
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.0, 5), stoneMat);
-    spike.position.y = 0.5;
-    spike.castShadow = true;
-    group.add(spike);
-    group.position.set(x, y, z);
-    return group;
-}
-
-function createBloodyBody(x, y, z) {
-    const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x8a6a6a });
-    const bloodMat = new THREE.MeshStandardMaterial({ color: 0xaa2222, emissive: 0x441111 });
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), bodyMat);
-    torso.position.y = 0.4;
-    torso.castShadow = true;
-    group.add(torso);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), bodyMat);
-    head.position.y = 0.9;
-    head.castShadow = true;
-    group.add(head);
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.2), bodyMat);
-    armL.position.set(-0.4, 0.65, 0);
-    armL.rotation.z = 0.3;
-    group.add(armL);
-    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.6, 0.2), bodyMat);
-    armR.position.set(0.4, 0.65, 0);
-    armR.rotation.z = -0.3;
-    group.add(armR);
-    const blood = new THREE.Mesh(new THREE.SphereGeometry(0.1, 4, 4), bloodMat);
-    blood.position.set(0.2, 0.5, 0.2);
-    group.add(blood);
-    group.position.set(x, y, z);
-    group.rotation.z = 0.2;
-    return group;
-}
-
-function generateCave(cx, cz, size, heightmap, isSuper = false) {
-    const group = new THREE.Group();
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x5a5a6a });
-    const domeHeight = isSuper ? 8 : 3;
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(size, 24, 24), stoneMat);
-    dome.scale.set(1.6, domeHeight / size, 1.4);
-    dome.position.y = -1;
-    dome.castShadow = true;
-    group.add(dome);
-    const entrance = new THREE.Mesh(new THREE.TorusGeometry(size * 0.7, 0.4, 16, 32), stoneMat);
-    entrance.rotation.x = Math.PI / 2;
-    entrance.position.set(0, -0.5, size * 0.8);
-    group.add(entrance);
-    for (let i = 0; i < (isSuper ? 30 : 8); i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const rad = Math.random() * size * 0.8;
-        const sx = Math.cos(angle) * rad;
-        const sz = Math.sin(angle) * rad;
-        group.add(createStalactite(sx, domeHeight - 0.5, sz));
-    }
-    for (let i = 0; i < (isSuper ? 20 : 5); i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const rad = Math.random() * size * 0.9;
-        const sx = Math.cos(angle) * rad;
-        const sz = Math.sin(angle) * rad;
-        group.add(createStalagmite(sx, -1.2, sz));
-    }
-    if (isSuper) {
-        const waterMat = new THREE.MeshStandardMaterial({ color: 0x336699, transparent: true, opacity: 0.6 });
-        const pool = new THREE.Mesh(new THREE.CircleGeometry(size * 0.6, 8), waterMat);
-        pool.rotation.x = -Math.PI / 2;
-        pool.position.y = -1.3;
-        group.add(pool);
-        const bodyPos = new THREE.Vector3(Math.cos(0.7) * size * 0.5, -1.0, Math.sin(0.7) * size * 0.5);
-        group.add(createBloodyBody(bodyPos.x, bodyPos.y, bodyPos.z));
-    }
-    const ix = Math.floor((cz + heightmap.size/2) / 4);
-    const iz = Math.floor((cx + heightmap.size/2) / 4);
-    const y = heightmap[ix]?.[iz] || 0;
-    group.position.set(cx, y - 0.8, cz);
-    scene.add(group);
-    cavesList.push({ position: group.position, radius: size * 1.2 });
-    return group;
-}
-
-function generateCaves(heightmap, count, isSuper = false) {
-    const size = heightmap.size;
-    for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const r = 100 + Math.random() * (size/2 - 80);
-        const x = Math.cos(angle) * r;
-        const z = Math.sin(angle) * r;
-        const caveSize = isSuper ? 6 + Math.random() * 3 : 2.5 + Math.random() * 2;
-        generateCave(x, z, caveSize, heightmap, isSuper);
-    }
-}
-
-// ─── Player & UI Setup ─────────────────────────────────────────────────────────
+// ─── Player & UI Setup ────────────────────────────────────────────────────────
 const playerModel = createPlayerModel(scene);
 initPlayerControls(camera, renderer.domElement);
 createUI();
 initBuilding(scene, () => playerModel.position.clone().add(new THREE.Vector3(0, CONFIG.player.height, 0)));
 updateGunVisuals('pistol');
 
-// Initialize flashlight
 const flashlight = createFlashlight();
 flashlightSpot = flashlight.spot;
 flashlightFill = flashlight.fill;
 
 // ─── Game State ───────────────────────────────────────────────────────────────
 let enemies = [];
-let playerHealth = CONFIG.player.health;
-let playerShield = CONFIG.player.shield;
-let playerCoins = 0;
 let mouseDown = false;
 let rightMouseDown = false;
 let isScoped = false;
@@ -583,10 +408,10 @@ function startNextWave() {
 }
 
 function addPracticeDummies() {
-    const positions = [[20,20],[-20,20],[20,-20],[-20,-20],[40,0],[-40,0],[0,40],[0,-40]];
-    positions.forEach(([x,z]) => {
-        const ix = Math.floor((x + DESERT_SIZE/2) / 4);
-        const iz = Math.floor((z + DESERT_SIZE/2) / 4);
+    const positions = [[20, 20], [-20, 20], [20, -20], [-20, -20], [40, 0], [-40, 0], [0, 40], [0, -40]];
+    positions.forEach(([x, z]) => {
+        const ix = Math.floor((x + DESERT_SIZE / 2) / 4);
+        const iz = Math.floor((z + DESERT_SIZE / 2) / 4);
         const y = terrainHeightmap?.[ix]?.[iz] || 0;
         const dummy = createDummyEnemy(x, z);
         dummy.position.y = y;
@@ -598,34 +423,22 @@ function addPracticeDummies() {
 window.startGame = (mode) => {
     window.gameStarted = true;
     window.currentGameMode = mode;
-    
     for (const e of enemies) if (e.parent) e.parent.remove(e);
     enemies = [];
     clearBuildables(scene);
     treeColliders = [];
     cavesList = [];
-    
     scene.children.forEach(child => {
-        if (child.isMesh && child.material && (child.material.color?.getHex() === 0x4a7a3a || child.material.color?.getHex() === 0xc2a575)) {
-            scene.remove(child);
-        }
-        if (child.isGroup && child.children.some(c => c.geometry?.type === 'CylinderGeometry')) {
-            scene.remove(child);
-        }
+        if (child.isMesh && child.material && (child.material.color?.getHex() === 0x4a7a3a || child.material.color?.getHex() === 0xc2a575)) scene.remove(child);
+        if (child.isGroup && child.children.some(c => c.geometry?.type === 'CylinderGeometry')) scene.remove(child);
     });
-    
     if (mode === 'practice') {
         terrainHeightmap = generateDesertMap();
         createGround(terrainHeightmap, true);
-        generateCacti(terrainHeightmap);
     } else {
         terrainHeightmap = generateForestMap();
         createGround(terrainHeightmap, false);
-        generateTrees(terrainHeightmap);
-        generateCaves(terrainHeightmap, 8, false);
-        generateCaves(terrainHeightmap, 1, true);
     }
-    
     playerHealth = CONFIG.player.health;
     playerShield = CONFIG.player.shield;
     playerCoins = mode === 'practice' ? 1000 : 0;
@@ -634,7 +447,6 @@ window.startGame = (mode) => {
     camera.position.set(0, startY + CONFIG.player.height, 0);
     playerModel.position.set(0, startY, 0);
     updateUI(playerHealth, playerShield, playerCoins);
-    
     if (mode === 'zombies') {
         currentWave = 0;
         waveInProgress = false;
@@ -642,7 +454,7 @@ window.startGame = (mode) => {
     } else if (mode === 'practice') {
         addPracticeDummies();
     }
-    
+    hideLobby();
     renderer.domElement.requestPointerLock();
 };
 
@@ -655,11 +467,8 @@ document.addEventListener('keydown', (e) => {
         else openSettings();
         return;
     }
-    if (e.code === 'KeyF' && window.gameStarted) {
-        toggleFlashlight();
-        e.preventDefault();
-    }
-    if (paused || !window.gameStarted) return;
+    if (e.code === 'KeyF' && window.gameStarted) { toggleFlashlight(); e.preventDefault(); }
+    if (window.gamePaused || !window.gameStarted) return;
     if (e.code === keybinds.weapon1) switchWeapon('pistol');
     if (e.code === keybinds.weapon2) switchWeapon('assault');
     if (e.code === keybinds.weapon3) switchWeapon('sniper');
@@ -680,11 +489,11 @@ let frameCount = 0;
 
 function cleanupTrails() {
     const now = performance.now();
-    for (let i = bulletTrails.length-1; i>=0; i--) {
+    for (let i = bulletTrails.length - 1; i >= 0; i--) {
         const t = bulletTrails[i];
         if (t?.parent && t.userData?.spawnTime && now - t.userData.spawnTime > 350) {
             scene.remove(t);
-            bulletTrails.splice(i,1);
+            bulletTrails.splice(i, 1);
         }
     }
 }
@@ -695,18 +504,14 @@ function animate() {
     const now = performance.now();
     let delta = Math.min(0.033, (now - lastTime) / 1000);
     lastTime = now;
-    
     updateTimeOfDay(delta);
-    
     frameCount++;
     if (now - lastFPSTime >= 500) {
         updateFPS(Math.round((frameCount * 1000) / (now - lastFPSTime)));
         frameCount = 0;
         lastFPSTime = now;
     }
-    
-    if (paused || !window.gameStarted) { renderer.render(scene, camera); return; }
-    
+    if (window.gamePaused || !window.gameStarted) { renderer.render(scene, camera); return; }
     const wp = CONFIG.weapons[getCurrentWeapon()];
     const shouldScope = rightMouseDown && !isBuildModeActive();
     if (shouldScope && !isScoped && wp.scopeZoom) {
@@ -717,17 +522,13 @@ function animate() {
         isScoped = false; camera.fov = 75; camera.updateProjectionMatrix(); setScopedUI(false);
         if (scopeOverlay) scopeOverlay.style.display = 'none';
     }
-    
     const playerPos = updatePlayerMovement(camera, delta, null, isScoped, getTerrainHeight, checkTreeCollision, collideWithBuilds);
     updateWeaponCooldown(delta);
     updateEnemies(enemies, playerPos, delta, getTerrainHeight);
     updatePlayerLight();
-    
-    // Update flashlight position and cave detection
     const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     updateFlashlightPosition(camera.position, cameraDir);
     checkCaveProximity(playerPos);
-    
     if (playerPos.y < -8) {
         playerHealth = CONFIG.player.health; playerShield = CONFIG.player.shield;
         updateUI(playerHealth, playerShield, playerCoins);
@@ -736,30 +537,22 @@ function animate() {
         camera.position.set(0, startY + CONFIG.player.height, 0);
         playerModel.position.set(0, startY, 0);
     }
-    
     if (window.currentGameMode === 'zombies') {
         for (const enemy of enemies) {
             if (enemy.userData.type !== 'zombie') continue;
             const ep = enemy.position.clone(); ep.y = 0;
             const pp = playerPos.clone(); pp.y = 0;
-            if (pp.distanceTo(ep) < 1.4) {
-                applyDamage(CONFIG.enemies.zombie.damageToPlayer);
-                break;
-            }
+            if (pp.distanceTo(ep) < 1.4) { applyDamage(CONFIG.enemies.zombie.damageToPlayer); break; }
         }
     }
-    
     if (mouseDown && document.pointerLockElement === renderer.domElement && !isBuildModeActive()) {
         const buildPieces = getBuildPieces();
         shootWeapon(raycaster, camera, scene, enemies, (killed) => { if (killed) onEnemyKilled(); }, bulletTrails, buildPieces);
     }
-    
     cleanupTrails();
     renderer.render(scene, camera);
 }
 animate();
 
-// Exports
 window.getTerrainHeight = getTerrainHeight;
 window.getBuildPieces = getBuildPieces;
-window.toggleFlashlight = toggleFlashlight;
