@@ -18,6 +18,7 @@ export const player = {
 
 let buildModeActive = false;
 
+// Build 1v1.lol style humanoid model
 function buildPlayerModel() {
     const root = new THREE.Group();
     const rig = new THREE.Group();
@@ -123,7 +124,7 @@ function buildPlayerModel() {
     head.castShadow = true;
     rig.add(head);
 
-    // Face mask / visor
+    // Face mask / visor (no face features)
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.2, 0.05), new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x335599 }));
     visor.position.set(0, 1.73, 0.39);
     rig.add(visor);
@@ -156,6 +157,9 @@ export function initPlayerControls(camera, domElement) {
         if (e.code === keybinds.jump) input.jump = true;
         if (e.code === keybinds.sprint) input.sprint = true;
         if (e.code === keybinds.buildToggle) toggleBuildMode();
+        if (e.code === keybinds.pickaxe || e.code === 'Digit5' || e.code === 'KeyQ') {
+            if (window.switchWeaponTo) window.switchWeaponTo('pickaxe');
+        }
     });
     document.addEventListener('keyup', (e) => {
         if (e.code === keybinds.forward) input.forward = false;
@@ -167,9 +171,32 @@ export function initPlayerControls(camera, domElement) {
     });
 }
 
-function toggleBuildMode() { buildModeActive = !buildModeActive; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
+function toggleBuildMode() { 
+    buildModeActive = !buildModeActive; 
+    if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); 
+}
+
 export function isBuildModeActive() { return buildModeActive; }
-export function respawnPlayer() { player.health = CONFIG.player.health; player.shield = CONFIG.player.shield; player.stamina = 100; player.velocity.set(0,0,0); player.alive = true; }
+export function setBuildModeActive(active) { buildModeActive = active; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
+
+export function updateGunVisuals(weaponId) { /* Handled in weapons.js */ }
+export function applyCosmetics() {
+    if (player.rig) {
+        player.rig.children.forEach(child => {
+            if (child.isMesh && child.material && child !== player.rig.children.find(c => c.position.y > 1.7)) {
+                child.material.color.set(COSMETICS.bodyColor);
+            }
+        });
+    }
+}
+
+export function respawnPlayer() { 
+    player.health = CONFIG.player.health; 
+    player.shield = CONFIG.player.shield; 
+    player.stamina = 100; 
+    player.velocity.set(0, 0, 0); 
+    player.alive = true; 
+}
 
 const tmpForward = new THREE.Vector3();
 const tmpRight = new THREE.Vector3();
@@ -221,7 +248,7 @@ export function updatePlayerMovement(camera, deltaTime, onSprintUpdate, isScoped
     player.object.position.copy(newPos);
     if (player.rig) { player.rig.rotation.y = player.yaw; animateBody(dt, tmpMove.lengthSq() > 0, speed); }
 
-    // Third-person camera
+    // Third-person camera over-the-shoulder
     const camOffset = new THREE.Vector3(0, 1.4, 5.5);
     const rotatedOffset = camOffset.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw))));
     camera.position.copy(player.object.position).add(rotatedOffset);
@@ -246,12 +273,9 @@ function animateBody(dt, moving, speed) {
     const legSwing = Math.sin(cycle) * 0.8 * intensity;
     const armSwing = Math.sin(cycle * 1.3) * 0.6 * intensity;
     
-    if (player.rig) {
-        const parts = ['leftThigh', 'rightThigh', 'leftCalf', 'rightCalf'];
-        parts.forEach(p => { if (player.rig[p]) player.rig[p].rotation.x = 0; });
-        if (player.rig.leftThigh) player.rig.leftThigh.rotation.x = legSwing;
-        if (player.rig.rightThigh) player.rig.rightThigh.rotation.x = -legSwing;
-        if (player.rig.leftCalf) player.rig.leftCalf.rotation.x = Math.max(0, legSwing * 0.8);
-        if (player.rig.rightCalf) player.rig.rightCalf.rotation.x = Math.max(0, -legSwing * 0.8);
-    }
+    // Find limb parts
+    const leftThigh = player.rig?.children.find(c => c.position.x < -0.2 && c.geometry?.parameters?.height > 0.5);
+    const rightThigh = player.rig?.children.find(c => c.position.x > 0.2 && c.geometry?.parameters?.height > 0.5);
+    if (leftThigh) leftThigh.rotation.x = legSwing;
+    if (rightThigh) rightThigh.rotation.x = -legSwing;
 }
