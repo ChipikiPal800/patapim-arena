@@ -5,20 +5,20 @@ import {
     createPlayerModel, initPlayerControls, updatePlayerMovement,
     updateGunVisuals, respawnPlayer, isBuildModeActive, setBuildModeActive, applyCosmetics
 } from './player.js';
-import { switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown, getCurrentWeapon, refreshAmmoForUpgrade, weaponState } from './weapons.js';
-import { createZombieEnemy, createDummyEnemy, updateEnemies, spawnWave, updateDeathParticles } from './enemies.js';
+import { switchWeapon, reloadWeapon, shootWeapon, updateWeaponCooldown, getCurrentWeapon, refreshAmmoForUpgrade, attachWeaponToHand } from './weapons.js';
+import { createZombieEnemy, createDummyEnemy, updateEnemies, spawnWave } from './enemies.js';
 import { initBuilding, setBuildMode, getCurrentBuildMode, clearBuildables, getBuildPieces, collideWithBuilds } from './building.js';
 import {
     createUI, updateUI, updateWeaponUI, showDamageFlash, setScopedUI,
     updateBuildModeUI, updateFPS, openSettings, closeSettings, isSettingsOpen,
     openArmory, closeArmory, isArmoryOpen, openLocker, closeLocker, isLockerOpen,
     showLobby, hideLobby, updateWaveUI, addKillFeed, updateTimeOfDayUI,
-    updateFlashlightUI, updateCaveIndicatorUI
+    updateFlashlightUI, updateCaveIndicatorUI, updateLobbyCharacter
 } from './ui.js';
 
 applyUpgrades();
 
-// ─── EXPOSE GLOBALS FOR UI BUTTONS ───────────────────────────────────────────
+// ─── EXPOSE GLOBALS ───────────────────────────────────────────────────────────
 window.updateWeaponUI = updateWeaponUI;
 window.showDamageFlash = showDamageFlash;
 window.updateGunVisuals = updateGunVisuals;
@@ -30,6 +30,7 @@ window.isBuildModeActive = isBuildModeActive;
 window.setBuildMode = setBuildMode;
 window.setBuildModeActive = setBuildModeActive;
 window.switchWeaponTo = switchWeapon;
+window.attachWeaponToHand = attachWeaponToHand;
 window.setPaused = (paused) => { window.gamePaused = paused; };
 window.getCoins = () => playerCoins;
 window.spendCoins = (amount) => { playerCoins -= amount; updateUI(playerHealth, playerShield, playerCoins); };
@@ -86,7 +87,6 @@ window.getGlobalAudio = getGlobalAudio;
 // ─── Day/Night Cycle ──────────────────────────────────────────────────────────
 let timeOfDay = 0.5;
 const DAY_CYCLE_DURATION = 1200;
-let lastTimeUpdate = performance.now();
 
 function updateTimeOfDay(deltaSec) {
     timeOfDay += deltaSec / DAY_CYCLE_DURATION;
@@ -160,19 +160,6 @@ function toggleFlashlight() {
     if (flashlightSpot) flashlightSpot.visible = flashlightActive;
     if (flashlightFill) flashlightFill.visible = flashlightActive;
     updateFlashlightUI(flashlightActive);
-    const ctx = getGlobalAudio();
-    if (ctx && ctx.state !== 'closed') {
-        if (ctx.state === 'suspended') ctx.resume();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.frequency.value = 900;
-        gain.gain.value = 0.12;
-        osc.start();
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
-        osc.stop(ctx.currentTime + 0.08);
-    }
 }
 window.toggleFlashlight = toggleFlashlight;
 
@@ -187,53 +174,24 @@ function updateFlashlightPosition(cameraPos, cameraDir) {
 // ─── Cave Ambience System ────────────────────────────────────────────────────
 let isInCave = false;
 let caveAmbienceNode = null;
-let caveAmbienceGain = null;
+let cavesList = [];
 
 function checkCaveProximity(playerPos) {
     let inCave = false;
     for (const cave of cavesList) {
         const dx = playerPos.x - cave.position.x;
         const dz = playerPos.z - cave.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist < cave.radius) { inCave = true; break; }
+        if (Math.sqrt(dx * dx + dz * dz) < cave.radius) { inCave = true; break; }
     }
     if (inCave !== isInCave) {
         isInCave = inCave;
         updateCaveIndicatorUI(isInCave);
-        const ctx = getGlobalAudio();
-        if (ctx) {
-            if (ctx.state === 'suspended') ctx.resume();
-            if (isInCave) {
-                if (!caveAmbienceNode) {
-                    const bufferSize = ctx.sampleRate * 2;
-                    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-                    const data = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.15;
-                    const src = ctx.createBufferSource();
-                    src.buffer = buffer;
-                    src.loop = true;
-                    const gain = ctx.createGain();
-                    gain.gain.value = 0.2;
-                    src.connect(gain);
-                    gain.connect(ctx.destination);
-                    src.start();
-                    caveAmbienceNode = src;
-                    caveAmbienceGain = gain;
-                }
-            } else {
-                if (caveAmbienceGain) {
-                    caveAmbienceGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1);
-                    setTimeout(() => { if (caveAmbienceNode) caveAmbienceNode.stop(); caveAmbienceNode = null; caveAmbienceGain = null; }, 1000);
-                }
-            }
-        }
     }
 }
 
-// ─── Terrain Collision Helpers ───────────────────────────────────────────────
+// ─── Terrain & Trees ─────────────────────────────────────────────────────────
 let terrainHeightmap = null;
 let treeColliders = [];
-let cavesList = [];
 
 function getTerrainHeight(x, z) {
     if (!terrainHeightmap) return 0;
@@ -254,7 +212,7 @@ function checkTreeCollision(x, z, radius) {
     return false;
 }
 
-// ─── Map Generators (Simplified for brevity) ─────────────────────────────────
+// ─── Map Generators ──────────────────────────────────────────────────────────
 const FOREST_SIZE = 1200;
 const DESERT_SIZE = 400;
 
@@ -268,7 +226,7 @@ function generateForestMap() {
             const worldZ = (z - dim / 2) * 4;
             const h1 = Math.sin(worldX * 0.03) * Math.cos(worldZ * 0.03) * 4;
             const h2 = Math.sin(worldX * 0.08 + 1.2) * Math.sin(worldZ * 0.07) * 3;
-            const h3 = Math.sin(worldX * 0.12 * worldZ * 0.12) * 2;
+            const h3 = Math.sin(worldX * 0.12) * Math.sin(worldZ * 0.12) * 2;
             let height = h1 + h2 + h3;
             const dist = Math.sqrt(worldX * worldX + worldZ * worldZ);
             if (dist < 60) height -= Math.sin(dist * 0.08) * 2.5;
@@ -309,12 +267,100 @@ function createGround(heightmap, isDesert = false) {
         if (ix >= 0 && ix < dim && iz >= 0 && iz < dim) positions[i + 1] = heightmap[ix][iz];
     }
     geometry.computeVertexNormals();
-    const material = new THREE.MeshStandardMaterial({ color: isDesert ? 0xc2a575 : 0x4a7a3a, roughness: 0.85, side: THREE.DoubleSide });
+    const texture = (() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = isDesert ? '#c2a575' : '#3a6a2a';
+        ctx.fillRect(0, 0, 512, 512);
+        for (let i = 0; i < 2000; i++) {
+            ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.1})`;
+            ctx.fillRect(Math.floor(Math.random() * 512), Math.floor(Math.random() * 512), 2, 2);
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(32, 32);
+        return tex;
+    })();
+    const material = new THREE.MeshStandardMaterial({ map: texture, color: isDesert ? 0xc2a575 : 0x4a7a3a, roughness: 0.85, side: THREE.DoubleSide });
     const ground = new THREE.Mesh(geometry, material);
     ground.receiveShadow = true;
     ground.position.y = -0.2;
     scene.add(ground);
     return ground;
+}
+
+function createTree(x, z, height) {
+    const group = new THREE.Group();
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.8 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x3a7a2a, roughness: 0.6 });
+    
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 2.0, 6), trunkMat);
+    trunk.position.y = 1.0;
+    trunk.castShadow = true;
+    group.add(trunk);
+    
+    const foliage1 = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.2, 8), foliageMat);
+    foliage1.position.y = 2.0;
+    foliage1.castShadow = true;
+    group.add(foliage1);
+    
+    const foliage2 = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1.0, 8), foliageMat);
+    foliage2.position.y = 2.9;
+    foliage2.castShadow = true;
+    group.add(foliage2);
+    
+    group.position.set(x, height, z);
+    treeColliders.push({ x, z, radius: 0.7 });
+    return group;
+}
+
+function generateTrees(heightmap) {
+    const size = heightmap.size;
+    const radius = size / 2 - 30;
+    for (let i = 0; i < 600; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = 40 + Math.random() * radius;
+        const x = Math.cos(angle) * r;
+        const z = Math.sin(angle) * r;
+        if (Math.abs(x) < 50 && Math.abs(z) < 50) continue;
+        const ix = Math.floor((x + size / 2) / 4);
+        const iz = Math.floor((z + size / 2) / 4);
+        if (ix < 0 || ix >= heightmap.length) continue;
+        const y = heightmap[ix][iz];
+        if (y < -0.5) continue;
+        let tooClose = false;
+        for (const t of treeColliders) {
+            if (Math.hypot(x - t.x, z - t.z) < 5) { tooClose = true; break; }
+        }
+        if (!tooClose) scene.add(createTree(x, z, y));
+    }
+}
+
+function createCactus(x, z, height) {
+    const group = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x5a7a3a });
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 1.5, 6), mat);
+    trunk.position.y = 0.75;
+    trunk.castShadow = true;
+    group.add(trunk);
+    group.position.set(x, height, z);
+    return group;
+}
+
+function generateCacti(heightmap) {
+    const size = heightmap.size;
+    for (let i = 0; i < 300; i++) {
+        const x = (Math.random() - 0.5) * (size - 60);
+        const z = (Math.random() - 0.5) * (size - 60);
+        const ix = Math.floor((x + size / 2) / 4);
+        const iz = Math.floor((z + size / 2) / 4);
+        if (ix < 0 || ix >= heightmap.length) continue;
+        const y = heightmap[ix][iz];
+        if (y > -0.5 && y < 3) scene.add(createCactus(x, z, y));
+    }
 }
 
 // ─── Player & UI Setup ────────────────────────────────────────────────────────
@@ -334,7 +380,6 @@ let mouseDown = false;
 let rightMouseDown = false;
 let isScoped = false;
 let bulletTrails = [];
-let paused = false;
 let currentWave = 0;
 let waveInProgress = false;
 let scopeOverlay = null;
@@ -353,12 +398,12 @@ function updatePlayerLight() {
     playerLight.position.y += 1.6;
 }
 
-function onEnemyKilled() {
-    const reward = window.currentGameMode === 'zombies' ? CONFIG.enemies.zombie.coinReward : 18;
+function onEnemyKilled(enemy) {
+    const reward = window.currentGameMode === 'zombies' ? CONFIG.enemies.zombie.coinReward : 10;
     playerCoins += reward;
     updateUI(playerHealth, playerShield, playerCoins);
+    addKillFeed(`+${reward} coins`);
     if (window.currentGameMode === 'zombies') {
-        addKillFeed(`💀 +${reward} coins`);
         updateWaveUI(currentWave, enemies.length);
         if (enemies.length === 0 && waveInProgress) {
             waveInProgress = false;
@@ -380,7 +425,7 @@ function applyDamage(amount) {
     updateUI(playerHealth, playerShield, playerCoins);
     showDamageFlash();
     if (playerHealth <= 0) {
-        addKillFeed(`💀 You died — wave ${currentWave}`);
+        addKillFeed(`💀 You died`);
         playerHealth = CONFIG.player.health;
         playerShield = CONFIG.player.shield;
         updateUI(playerHealth, playerShield, playerCoins);
@@ -402,13 +447,13 @@ function startNextWave() {
     if (window.currentGameMode !== 'zombies') return;
     currentWave++;
     waveInProgress = true;
-    const count = spawnWave(scene, enemies, currentWave, playerModel.position.clone(), getTerrainHeight);
+    spawnWave(scene, enemies, currentWave, playerModel.position.clone(), getTerrainHeight);
     updateWaveUI(currentWave, enemies.length);
-    addKillFeed(`🌙 Wave ${currentWave} — ${count} zombies rise`);
+    addKillFeed(`🌙 Wave ${currentWave} starts`);
 }
 
 function addPracticeDummies() {
-    const positions = [[20, 20], [-20, 20], [20, -20], [-20, -20], [40, 0], [-40, 0], [0, 40], [0, -40]];
+    const positions = [[15, 15], [-15, 15], [15, -15], [-15, -15], [30, 0], [-30, 0], [0, 30], [0, -30]];
     positions.forEach(([x, z]) => {
         const ix = Math.floor((x + DESERT_SIZE / 2) / 4);
         const iz = Math.floor((z + DESERT_SIZE / 2) / 4);
@@ -428,17 +473,23 @@ window.startGame = (mode) => {
     clearBuildables(scene);
     treeColliders = [];
     cavesList = [];
+    
+    // Clear old terrain
     scene.children.forEach(child => {
         if (child.isMesh && child.material && (child.material.color?.getHex() === 0x4a7a3a || child.material.color?.getHex() === 0xc2a575)) scene.remove(child);
-        if (child.isGroup && child.children.some(c => c.geometry?.type === 'CylinderGeometry')) scene.remove(child);
+        if (child.isGroup && child.children.some(c => c.geometry?.type === 'CylinderGeometry' || c.geometry?.type === 'ConeGeometry')) scene.remove(child);
     });
+    
     if (mode === 'practice') {
         terrainHeightmap = generateDesertMap();
         createGround(terrainHeightmap, true);
+        generateCacti(terrainHeightmap);
     } else {
         terrainHeightmap = generateForestMap();
         createGround(terrainHeightmap, false);
+        generateTrees(terrainHeightmap);
     }
+    
     playerHealth = CONFIG.player.health;
     playerShield = CONFIG.player.shield;
     playerCoins = mode === 'practice' ? 1000 : 0;
@@ -447,6 +498,7 @@ window.startGame = (mode) => {
     camera.position.set(0, startY + CONFIG.player.height, 0);
     playerModel.position.set(0, startY, 0);
     updateUI(playerHealth, playerShield, playerCoins);
+    
     if (mode === 'zombies') {
         currentWave = 0;
         waveInProgress = false;
@@ -505,16 +557,19 @@ function animate() {
     let delta = Math.min(0.033, (now - lastTime) / 1000);
     lastTime = now;
     updateTimeOfDay(delta);
+    
     frameCount++;
     if (now - lastFPSTime >= 500) {
         updateFPS(Math.round((frameCount * 1000) / (now - lastFPSTime)));
         frameCount = 0;
         lastFPSTime = now;
     }
+    
     if (window.gamePaused || !window.gameStarted) { renderer.render(scene, camera); return; }
+    
     const wp = CONFIG.weapons[getCurrentWeapon()];
     const shouldScope = rightMouseDown && !isBuildModeActive();
-    if (shouldScope && !isScoped && wp.scopeZoom) {
+    if (shouldScope && !isScoped && wp?.scopeZoom) {
         isScoped = true; camera.fov = 75 / wp.scopeZoom; camera.updateProjectionMatrix(); setScopedUI(true);
         if (scopeOverlay && getCurrentWeapon() === 'sniper') scopeOverlay.style.display = 'block';
     }
@@ -522,13 +577,16 @@ function animate() {
         isScoped = false; camera.fov = 75; camera.updateProjectionMatrix(); setScopedUI(false);
         if (scopeOverlay) scopeOverlay.style.display = 'none';
     }
+    
     const playerPos = updatePlayerMovement(camera, delta, null, isScoped, getTerrainHeight, checkTreeCollision, collideWithBuilds);
     updateWeaponCooldown(delta);
     updateEnemies(enemies, playerPos, delta, getTerrainHeight);
     updatePlayerLight();
+    
     const cameraDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     updateFlashlightPosition(camera.position, cameraDir);
     checkCaveProximity(playerPos);
+    
     if (playerPos.y < -8) {
         playerHealth = CONFIG.player.health; playerShield = CONFIG.player.shield;
         updateUI(playerHealth, playerShield, playerCoins);
@@ -537,6 +595,7 @@ function animate() {
         camera.position.set(0, startY + CONFIG.player.height, 0);
         playerModel.position.set(0, startY, 0);
     }
+    
     if (window.currentGameMode === 'zombies') {
         for (const enemy of enemies) {
             if (enemy.userData.type !== 'zombie') continue;
@@ -545,10 +604,12 @@ function animate() {
             if (pp.distanceTo(ep) < 1.4) { applyDamage(CONFIG.enemies.zombie.damageToPlayer); break; }
         }
     }
+    
     if (mouseDown && document.pointerLockElement === renderer.domElement && !isBuildModeActive()) {
         const buildPieces = getBuildPieces();
         shootWeapon(raycaster, camera, scene, enemies, (killed) => { if (killed) onEnemyKilled(); }, bulletTrails, buildPieces);
     }
+    
     cleanupTrails();
     renderer.render(scene, camera);
 }
