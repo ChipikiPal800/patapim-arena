@@ -733,4 +733,21 @@ export function closeLocker() {
     if (window.setPaused) window.setPaused(false);
 }
 
+// Add to ui.js - Time of Day UI
+export function updateTimeOfDayUI(timeOfDay, isNight) {
+    let timeDiv = document.getElementById('timeOfDayUI');
+    if (!timeDiv) {
+        timeDiv = document.createElement('div');
+        timeDiv.id = 'timeOfDayUI';
+        timeDiv.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); backdrop-filter:blur(8px); border-radius:20px; padding:6px 16px; font-size:12px; font-weight:bold; color:#ffdd88; z-index:20; pointer-events:none;';
+        document.body.appendChild(timeDiv);
+    }
+    
+    const hour = Math.floor(timeOfDay * 24);
+    const minute = Math.floor((timeOfDay * 24 - hour) * 60);
+    const timeStr = `${hour.toString().padStart(2,'0')}:${minute.toString().padStart(2,'0')}`;
+    const icon = isNight ? '🌙' : '☀️';
+    timeDiv.innerHTML = `${icon} ${timeStr}`;
+}
+
 export function isLockerOpen() { return lockerOpen; }
