@@ -699,3 +699,238 @@ body {
     z-index: 20;
     font-family: monospace;
 }
+
+/* Fortnite-style Lobby */
+.lobby-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: linear-gradient(135deg, #0a0a2a 0%, #1a1a4a 100%);
+    overflow: hidden;
+}
+
+.lobby-background {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 30%, rgba(0, 100, 200, 0.15) 0%, transparent 70%);
+}
+
+.lobby-content {
+    position: relative;
+    display: flex;
+    height: 100%;
+    padding: 40px 60px;
+    gap: 40px;
+}
+
+.lobby-left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.lobby-logo h1 {
+    font-size: 48px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff, #ffaa44);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 20px rgba(255, 170, 68, 0.3);
+}
+
+.lobby-logo p {
+    color: #ffaa44;
+    font-size: 14px;
+    letter-spacing: 4px;
+}
+
+.lobby-stats {
+    display: flex;
+    gap: 30px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 15px 25px;
+    border-radius: 20px;
+}
+
+.lobby-stats .stat {
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.lobby-stats .stat span:first-child {
+    margin-right: 8px;
+}
+
+.lobby-friends {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 20px;
+    padding: 15px;
+}
+
+.friends-header {
+    font-size: 14px;
+    font-weight: bold;
+    color: #aaa;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.friend {
+    padding: 8px 0;
+    color: #ddd;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.friend-status {
+    margin-left: auto;
+    font-size: 11px;
+    color: #ffaa44;
+}
+
+.lobby-center {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.lobby-character-container {
+    width: 300px;
+    height: 400px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 30px;
+    overflow: hidden;
+}
+
+.lobby-username {
+    margin-top: 20px;
+    font-size: 20px;
+    font-weight: bold;
+    color: #fff;
+    background: linear-gradient(135deg, #fff, #ffaa44);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.lobby-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.lobby-party {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 20px;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.party-code {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ffaa44;
+}
+
+.copy-btn, .leave-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.lobby-menu-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.lobby-menu-buttons .menu-btn {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.lobby-menu-buttons .menu-btn:hover {
+    background: rgba(0, 150, 200, 0.3);
+    border-color: #00ccff;
+    transform: scale(1.02);
+}
+
+.lobby-play {
+    margin-top: 10px;
+}
+
+.play-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #ffaa44, #ff6644);
+    border: none;
+    color: white;
+    padding: 15px;
+    border-radius: 30px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.play-btn:hover {
+    transform: scale(1.02);
+    box-shadow: 0 0 20px rgba(255, 102, 68, 0.5);
+}
+
+.mode-select {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mode-option {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    padding: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.mode-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.lobby-store-buttons {
+    margin-top: auto;
+    display: flex;
+    gap: 10px;
+}
+
+.store-btn {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    color: #ddd;
+    padding: 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    cursor: pointer;
+}
