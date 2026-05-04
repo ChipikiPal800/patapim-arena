@@ -13,7 +13,7 @@ function getAudio() {
     return audioCtx;
 }
 
-// Generate gunshot sounds programmatically (no external files needed)
+// Generate gunshot sounds programmatically
 function playGunshot(weaponId) {
     const ctx = getAudio();
     if (!ctx) return;
@@ -31,7 +31,6 @@ function playGunshot(weaponId) {
         shotgun: { duration: 0.32, freq: 100, noiseGain: 1.0,  bodyGain: 0.6, lowpass: 1400, decay: 0.25 }
     }[weaponId] || { duration: 0.15, freq: 200, noiseGain: 0.6, bodyGain: 0.4, lowpass: 1800, decay: 0.12 };
 
-    // Noise burst (the "crack")
     const bufferSize = Math.floor(ctx.sampleRate * config.duration);
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -56,7 +55,6 @@ function playGunshot(weaponId) {
     noiseFilter.connect(noiseGain);
     noiseGain.connect(masterGain);
 
-    // Body thump (the "boom")
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(config.freq, now);
@@ -83,7 +81,7 @@ export const weaponState = {
     reloadTimer: 0,
     flash: null,
     gunModel: null,
-    gunGroup: null  // attached to camera
+    gunGroup: null
 };
 
 // Build a 3D gun model attached to camera
@@ -134,7 +132,6 @@ function buildGunModel(weaponId) {
         const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.4), metalMat);
         barrel.position.set(0, 0.04, -0.85);
         group.add(barrel);
-        // Scope
         const scopeBody = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 16), accentMat);
         scopeBody.rotation.x = Math.PI / 2;
         scopeBody.position.set(0, 0.13, -0.25);
@@ -157,7 +154,6 @@ function buildGunModel(weaponId) {
         group.add(pump);
     }
 
-    // Position the whole gun in front of camera, slightly to the right (right-handed)
     group.position.set(0.2, -0.18, -0.4);
     group.rotation.y = -0.05;
     return group;
@@ -209,25 +205,25 @@ export function updateWeapons(dt, scene, enemies, onKill, builds) {
         const id = weaponState.current;
         const cfg = CONFIG.weapons[id];
         if (weaponState.ammo[id] > 0) {
+            // FIXED: Pass builds to fire()
             fire(scene, enemies, id, cfg, onKill, builds);
             weaponState.ammo[id]--;
             weaponState.cooldown = cfg.fireRate;
         } else {
-            // Auto-reload
             startReload();
         }
     }
 
-    // Animate gun (recoil + bob + aim)
     animateGun(dt);
 }
 
 function fire(scene, enemies, id, cfg, onKill, builds) {
     playGunshot(id);
 
-    // Apply recoil to camera (push pitch up, random horizontal)
+    // Apply recoil to camera
     player.pitch += cfg.recoilV * (0.7 + Math.random() * 0.6);
     player.yaw += (Math.random() - 0.5) * cfg.recoilH * 2;
+    
     // Visual gun kick
     if (weaponState.gunModel) {
         weaponState.gunModel.userData = weaponState.gunModel.userData || {};
@@ -238,16 +234,15 @@ function fire(scene, enemies, id, cfg, onKill, builds) {
     spawnMuzzleFlash(scene);
 
     if (id === 'shotgun') {
-        // 8 pellets in a spread
+        // 8 pellets with spread
         const pellets = cfg.pellets || 8;
-        const spread = cfg.spread || 0.10;
+        const spread = 0.12; // Fixed spread value
         for (let i = 0; i < pellets; i++) {
             const sx = (Math.random() - 0.5) * spread;
             const sy = (Math.random() - 0.5) * spread;
             castBullet(scene, enemies, cfg.damage, cfg.range, sx, sy, onKill, builds);
         }
     } else {
-        // Single shot, slight inaccuracy
         const inaccuracy = player.aimBlend > 0.5 ? 0.005 : 0.02;
         const sx = (Math.random() - 0.5) * inaccuracy;
         const sy = (Math.random() - 0.5) * inaccuracy;
@@ -256,10 +251,8 @@ function fire(scene, enemies, id, cfg, onKill, builds) {
 }
 
 function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, builds) {
-    // Direction from camera with spread
     tmpDir.set(0, 0, -1);
     tmpDir.applyQuaternion(player.camera.quaternion);
-    // Apply spread in camera local right/up
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.camera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(player.camera.quaternion);
     tmpDir.addScaledVector(right, spreadX).addScaledVector(up, spreadY).normalize();
@@ -267,28 +260,23 @@ function castBullet(scene, enemies, damage, range, spreadX, spreadY, onKill, bui
     raycaster.set(player.camera.getWorldPosition(new THREE.Vector3()), tmpDir);
     raycaster.far = range;
 
-    // Test enemies
     const intersects = raycaster.intersectObjects(enemies, true);
     let firstHit = intersects[0];
 
-    // Test builds (block bullets)
+    // Bullets collide with builds
     if (builds && builds.length > 0) {
         const buildHits = raycaster.intersectObjects(builds, true);
         if (buildHits[0] && (!firstHit || buildHits[0].distance < firstHit.distance)) {
-            // Bullet blocked by build piece
-            firstHit = null;
+            firstHit = null; // Bullet stopped by build
         }
     }
 
     if (firstHit) {
-        // Find root enemy
         let root = firstHit.object;
         while (root.parent && !enemies.includes(root)) root = root.parent;
         if (enemies.includes(root)) {
             const killed = damageEnemy(root, damage);
-            if (killed) {
-                if (onKill) onKill(root);
-            }
+            if (killed && onKill) onKill(root);
         }
     }
 }
@@ -300,7 +288,7 @@ function spawnMuzzleFlash(scene) {
     flash.position.set(0, 0.04, -0.85);
     setTimeout(() => {
         if (weaponState.gunModel) weaponState.gunModel.remove(flash);
-        flash.dispose && flash.dispose();
+        flash.dispose?.();
     }, 50);
 }
 
@@ -319,17 +307,14 @@ function animateGun(dt) {
     const m = weaponState.gunModel;
     const ud = m.userData = m.userData || {};
 
-    // Recoil kick decay
     ud.kick = (ud.kick || 0);
     ud.kick *= Math.max(0, 1 - dt * 12);
 
-    // Bob with movement
     const speed = player.speedSmooth || 0;
     const cycle = player.walkCycle || 0;
     const bobX = Math.sin(cycle) * 0.02 * speed * (1 - player.aimBlend);
     const bobY = Math.abs(Math.sin(cycle * 2)) * 0.025 * speed * (1 - player.aimBlend);
 
-    // Aim position: gun moves to center when scoping
     const baseX = THREE.MathUtils.lerp(0.2, 0, player.aimBlend);
     const baseY = THREE.MathUtils.lerp(-0.18, -0.13, player.aimBlend);
     const baseZ = THREE.MathUtils.lerp(-0.4, -0.35, player.aimBlend);
@@ -338,11 +323,9 @@ function animateGun(dt) {
     m.position.y = baseY + bobY;
     m.position.z = baseZ + ud.kick * 0.05;
 
-    // Rotation kick (gun tips up)
     m.rotation.x = -ud.kick * 0.15;
     m.rotation.y = THREE.MathUtils.lerp(-0.05, 0, player.aimBlend);
 
-    // Reload anim - gun drops down
     if (weaponState.reloading) {
         const cfg = CONFIG.weapons[weaponState.current];
         const t = 1 - weaponState.reloadTimer / cfg.reloadTime;
@@ -351,7 +334,6 @@ function animateGun(dt) {
         m.rotation.x -= pulse * 0.5;
     }
 
-    // Scope FOV target
     const cfg = CONFIG.weapons[weaponState.current];
     player.targetFOV = input.scope ? (75 / cfg.scopeZoom) : 75;
 }
