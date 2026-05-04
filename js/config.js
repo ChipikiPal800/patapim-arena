@@ -2,8 +2,8 @@ export const CONFIG = {
     player: {
         health: 100,
         shield: 100,
-        walkSpeed: 5.0,
-        runSpeed: 8.0,
+        walkSpeed: 5.4,
+        runSpeed: 8.2,
         sprintDrain: 15,
         sprintRegen: 20,
         jumpPower: 8.0,
@@ -42,7 +42,7 @@ export const CONFIG = {
         }
     },
     enemies: {
-        zombie: { health: 70, damageToPlayer: 15, speed: 2.6, size: 1.0, coinReward: 18 }
+        zombie: { health: 70, damageToPlayer: 8, speed: 2.6, size: 1.0, coinReward: 1 }
     },
     world: {
         groundSize: 400,
