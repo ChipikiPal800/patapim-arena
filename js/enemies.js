@@ -1,13 +1,98 @@
 import * as THREE from 'three';
-import { CONFIG } from './config.js';
+import { CONFIG, SETTINGS } from './config.js';
 
 const ZOMBIE_SKIN = 0x6b8a4a;
 const ZOMBIE_DARK = 0x3d5028;
 const ZOMBIE_CLOTH = 0x4a3a30;
 const ZOMBIE_BLOOD = 0x6e1a1a;
 
+// Audio context for sounds
+let audioCtx = null;
+
+function getAudio() {
+    if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { return null; }
+    }
+    return audioCtx;
+}
+
+function playZombieSound(type) {
+    const ctx = getAudio();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume();
+    
+    const now = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.gain.value = SETTINGS.sfxVolume * 0.3;
+    gain.connect(ctx.destination);
+    
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    
+    if (type === 'spawn') {
+        osc.frequency.value = 150;
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8);
+        osc.start(now);
+        osc.stop(now + 0.8);
+    } else if (type === 'death') {
+        osc.frequency.value = 80;
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+    } else if (type === 'attack') {
+        osc.frequency.value = 200;
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+    }
+    
+    osc.connect(gain);
+}
+
+// Particle system for death effects
+let deathParticles = [];
+
+function createDeathParticles(x, y, z) {
+    const particleCount = 15;
+    const particles = [];
+    for (let i = 0; i < particleCount; i++) {
+        const particle = {
+            x, y, z,
+            vx: (Math.random() - 0.5) * 3,
+            vy: Math.random() * 4,
+            vz: (Math.random() - 0.5) * 3,
+            life: 1.0,
+            decay: 0.02 + Math.random() * 0.03
+        };
+        particles.push(particle);
+    }
+    deathParticles.push(...particles);
+}
+
+export function updateDeathParticles(dt) {
+    for (let i = deathParticles.length - 1; i >= 0; i--) {
+        const p = deathParticles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        p.vy -= 5 * dt;
+        p.life -= p.decay;
+        if (p.life <= 0) {
+            deathParticles.splice(i, 1);
+        }
+    }
+}
+
+export function drawDeathParticles(scene) {
+    for (const p of deathParticles) {
+        // Simple particle rendering would go here if we had a particle system
+        // For now, we'll just track them
+    }
+}
+
 // ─── ZOMBIE ENEMY ────────────────────────────────────────────────────────────
-export function createZombieEnemy(x, z) {
+export function createZombieEnemy(x, z, groundY = 0) {
     const group = new THREE.Group();
 
     const skinMat = new THREE.MeshLambertMaterial({ color: ZOMBIE_SKIN });
@@ -113,7 +198,7 @@ export function createZombieEnemy(x, z) {
     rightLeg.position.set(0.18, 0.55, 0);
     group.add(rightLeg);
 
-    group.position.set(x, 0, z);
+    group.position.set(x, groundY, z);
     group.userData = {
         type: 'zombie',
         health: CONFIG.enemies.zombie.health,
@@ -124,13 +209,18 @@ export function createZombieEnemy(x, z) {
         head: headGroup,
         leftArm, rightArm, leftLeg, rightLeg,
         torso: torsoGroup,
-        velY: 0
+        velY: 0,
+        attackTimer: 0
     };
+    
+    // Play spawn sound
+    playZombieSound('spawn');
+    
     return group;
 }
 
 // ─── DUMMY ENEMY FOR PRACTICE MODE ──────────────────────────────────────────
-export function createDummyEnemy(x, z) {
+export function createDummyEnemy(x, z, groundY = 0) {
     const group = new THREE.Group();
     const mat = new THREE.MeshLambertMaterial({ color: 0x9aa8b8 });
     const accent = new THREE.MeshLambertMaterial({ color: 0x3a4a5a });
@@ -163,7 +253,7 @@ export function createDummyEnemy(x, z) {
     legR.castShadow = true;
     group.add(legR);
 
-    group.position.set(x, 0, z);
+    group.position.set(x, groundY, z);
     group.userData = {
         type: 'dummy',
         health: 100,
@@ -192,18 +282,20 @@ export function updateEnemies(enemiesList, playerPos, dt, getGroundHeight) {
             e.rotation.y = targetYaw;
         }
 
-        if (dist > 1.2 && ud.speed > 0) {
+        if (dist > 1.5 && ud.speed > 0) {
             const nx = dx / dist;
             const nz = dz / dist;
             e.position.x += nx * ud.speed * dt;
             e.position.z += nz * ud.speed * dt;
             ud.walkCycle += dt * (5 + ud.speed);
-        } else {
-            if (ud.damageCD <= 0 && ud.speed > 0) {
-                // Damage handled in main.js
-                ud.damageCD = 1.0;
+            ud.attackTimer = Math.max(0, ud.attackTimer - dt);
+        } else if (ud.speed > 0) {
+            // Attack anim
+            if (ud.attackTimer <= 0) {
+                ud.attackTimer = 0.5;
+                playZombieSound('attack');
             }
-            ud.walkCycle += dt * 8;
+            ud.walkCycle += dt * 10;
         }
         ud.damageCD = Math.max(0, ud.damageCD - dt);
 
@@ -219,6 +311,8 @@ export function updateEnemies(enemiesList, playerPos, dt, getGroundHeight) {
         // Animate zombie limbs
         const c = ud.walkCycle;
         const swing = Math.sin(c) * 0.6;
+        const attackSwing = ud.attackTimer > 0 ? Math.sin(ud.attackTimer * 20) * 0.8 : 0;
+        
         if (ud.leftLeg) {
             ud.leftLeg.rotation.x = swing;
             if (ud.leftLeg.userData.knee) ud.leftLeg.userData.knee.rotation.x = Math.max(0, -Math.sin(c) * 0.7);
@@ -227,8 +321,14 @@ export function updateEnemies(enemiesList, playerPos, dt, getGroundHeight) {
             ud.rightLeg.rotation.x = -swing;
             if (ud.rightLeg.userData.knee) ud.rightLeg.userData.knee.rotation.x = Math.max(0, Math.sin(c) * 0.7);
         }
-        if (ud.leftArm) ud.leftArm.rotation.x = -1.0 + Math.sin(c * 0.7) * 0.15;
-        if (ud.rightArm) ud.rightArm.rotation.x = -1.1 + Math.sin(c * 0.7 + 1) * 0.15;
+        if (ud.leftArm) {
+            ud.leftArm.rotation.x = -1.0 + Math.sin(c * 0.7) * 0.15 + attackSwing;
+            ud.leftArm.rotation.z = 0.2 + attackSwing * 0.3;
+        }
+        if (ud.rightArm) {
+            ud.rightArm.rotation.x = -1.1 + Math.sin(c * 0.7 + 1) * 0.15 - attackSwing;
+            ud.rightArm.rotation.z = -0.2 - attackSwing * 0.3;
+        }
         if (ud.torso) {
             ud.torso.position.y = 1.0 + Math.abs(Math.sin(c)) * 0.04;
             ud.torso.rotation.z = Math.sin(c * 0.5) * 0.05;
@@ -241,39 +341,47 @@ export function updateEnemies(enemiesList, playerPos, dt, getGroundHeight) {
 // ─── DAMAGE ENEMY ───────────────────────────────────────────────────────────
 export function damageEnemy(enemy, dmg) {
     if (!enemy || !enemy.userData) return false;
+    const wasAlive = enemy.userData.health > 0;
     enemy.userData.health -= dmg;
+    
     // Hit flash
     enemy.traverse(obj => {
         if (obj.isMesh && obj.material && obj.material.color) {
             if (!obj.userData._origColor) {
                 obj.userData._origColor = obj.material.color.getHex();
             }
-            obj.material.color.setHex(0xffffff);
+            obj.material.color.setHex(0xff6666);
             setTimeout(() => {
                 if (obj.userData._origColor !== undefined) {
                     obj.material.color.setHex(obj.userData._origColor);
                 }
-            }, 60);
+            }, 80);
         }
     });
-    return enemy.userData.health <= 0;
+    
+    const isDead = enemy.userData.health <= 0;
+    if (isDead && wasAlive) {
+        playZombieSound('death');
+        createDeathParticles(enemy.position.x, enemy.position.y + 1, enemy.position.z);
+    }
+    
+    return isDead;
 }
 
 // ─── SPAWN WAVE ─────────────────────────────────────────────────────────────
 export function spawnWave(scene, enemies, waveNumber, playerPos, getGroundHeight) {
-    const count = 3 + waveNumber * 2;
-    const speedMult = 1 + (waveNumber - 1) * 0.08;
-    const healthMult = 1 + (waveNumber - 1) * 0.15;
-    const mapBounds = CONFIG.world.groundSize / 2 - 20;
+    const count = 3 + Math.min(waveNumber * 2, 25);
+    const speedMult = 1 + (waveNumber - 1) * 0.05;
+    const healthMult = 1 + (waveNumber - 1) * 0.1;
+    const mapBounds = 500;
     
     for (let i = 0; i < count; i++) {
         const angle = (i / count) * Math.PI * 2 + Math.random() * 0.5;
-        const radius = 35 + Math.random() * 50;
+        const radius = 40 + Math.random() * 60;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
         const y = getGroundHeight ? getGroundHeight(x, z) : 0;
-        const zombie = createZombieEnemy(x, z);
-        zombie.position.y = y;
+        const zombie = createZombieEnemy(x, z, y);
         zombie.userData.speed *= speedMult;
         zombie.userData.health = Math.round(zombie.userData.health * healthMult);
         zombie.userData.maxHealth = zombie.userData.health;
