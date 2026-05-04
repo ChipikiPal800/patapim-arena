@@ -1070,3 +1070,118 @@ input[type="color"] {
     color: #ff6666;
     font-weight: 700;
 }
+
+/* Weapon container - bottom center */
+.weapon-container {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 8px 16px;
+    display: flex;
+    gap: 20px;
+    z-index: 25;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.weapon-slots {
+    display: flex;
+    gap: 8px;
+}
+
+.weapon-slot {
+    width: 70px;
+    height: 70px;
+    background: rgba(30, 35, 45, 0.9);
+    border: 2px solid rgba(100, 110, 130, 0.5);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.1s;
+    position: relative;
+}
+
+.weapon-slot.active {
+    border-color: #ffaa44;
+    background: rgba(50, 60, 80, 0.95);
+    box-shadow: 0 0 15px rgba(255, 170, 68, 0.4);
+}
+
+.weapon-slot-key {
+    position: absolute;
+    top: 4px;
+    left: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.weapon-slot-icon {
+    width: 36px;
+    height: 36px;
+    margin-top: 4px;
+}
+
+.weapon-svg {
+    width: 100%;
+    height: 100%;
+}
+
+.weapon-slot-ammo {
+    font-size: 10px;
+    font-weight: 700;
+    color: #ffaa44;
+    margin-top: 2px;
+}
+
+/* Flashlight indicator */
+.flashlight-indicator {
+    position: fixed;
+    bottom: 100px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #ffdd88;
+    border: 1px solid #ffdd88;
+    z-index: 20;
+    pointer-events: none;
+}
+
+/* Cave indicator */
+.cave-indicator {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    border-radius: 20px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #ff6666;
+    border: 1px solid #ff6666;
+    text-shadow: 0 0 5px rgba(255,0,0,0.5);
+    z-index: 20;
+    pointer-events: none;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.hidden {
+    display: none;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; text-shadow: 0 0 10px rgba(255,0,0,0.8); }
+}
