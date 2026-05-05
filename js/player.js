@@ -342,3 +342,6 @@ function animateBody(dt, moving, speed) {
     if (parts.leftForearm) parts.leftForearm.rotation.z = armSwing * 0.5;
     if (parts.rightForearm) parts.rightForearm.rotation.z = -armSwing * 0.5;
 }
+
+
+export { input, player };
