@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { CONFIG, SETTINGS, COSMETICS } from './config.js';
 import { keybinds } from './keybinds.js';
 
+// Input state (exported once)
 export const input = {
     forward: false, back: false, left: false, right: false,
     jump: false, sprint: false, scope: false, shoot: false,
     yaw: 0, pitch: 0, mouseDX: 0, mouseDY: 0
 };
 
+// Player state (exported once)
 export const player = {
     object: null, rig: null, camera: null,
     velocity: new THREE.Vector3(),
@@ -24,27 +26,25 @@ function buildPlayerModel() {
     const rig = new THREE.Group();
     root.add(rig);
 
-    // Material colors (will be updated by locker)
     const shirtMat = new THREE.MeshStandardMaterial({ color: COSMETICS.bodyColor || 0x6da3d4, roughness: 0.4, metalness: 0.1 });
     const pantsMat = new THREE.MeshStandardMaterial({ color: COSMETICS.accentColor || 0x1a3550, roughness: 0.5 });
     const skinMat = new THREE.MeshStandardMaterial({ color: COSMETICS.headColor || 0xfdd7a8, roughness: 0.3 });
     const bootMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
     const darkMat = new THREE.MeshStandardMaterial({ color: 0x3a4a5a });
 
-    // === UPPER BODY ===
-    // Torso (slim, athletic)
+    // Torso
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.8, 0.4), shirtMat);
     torso.position.y = 0.85;
     torso.castShadow = true;
     rig.add(torso);
 
-    // Chest plate / armor accent
+    // Chest plate
     const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.35, 0.06), darkMat);
     chestPlate.position.set(0, 1.05, 0.22);
     chestPlate.castShadow = true;
     rig.add(chestPlate);
 
-    // Shoulders (rounded)
+    // Shoulders
     const leftShoulder = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), darkMat);
     leftShoulder.position.set(-0.4, 1.2, 0);
     leftShoulder.castShadow = true;
@@ -55,7 +55,6 @@ function buildPlayerModel() {
     rightShoulder.castShadow = true;
     rig.add(rightShoulder);
 
-    // === ARMS ===
     // Upper arms
     const leftArmUpper = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.55, 6), shirtMat);
     leftArmUpper.position.set(-0.48, 0.95, 0);
@@ -78,7 +77,7 @@ function buildPlayerModel() {
     rightForearm.castShadow = true;
     rig.add(rightForearm);
 
-    // Hands (simple boxes)
+    // Hands
     const leftHand = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.18), skinMat);
     leftHand.position.set(-0.51, 0.43, 0);
     leftHand.castShadow = true;
@@ -89,8 +88,7 @@ function buildPlayerModel() {
     rightHand.castShadow = true;
     rig.add(rightHand);
 
-    // === LOWER BODY ===
-    // Hips / pelvis
+    // Hips
     const hips = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.42), pantsMat);
     hips.position.y = 0.5;
     hips.castShadow = true;
@@ -129,20 +127,19 @@ function buildPlayerModel() {
     rightFoot.castShadow = true;
     rig.add(rightFoot);
 
-    // === HEAD ===
     // Neck
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.12, 6), skinMat);
     neck.position.set(0, 1.48, 0);
     neck.castShadow = true;
     rig.add(neck);
 
-    // Head (slightly squashed sphere)
+    // Head
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 24), skinMat);
     head.position.y = 1.68;
     head.castShadow = true;
     rig.add(head);
 
-    // Hair (helmet-like)
+    // Hair
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a });
     const hair = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 16), hairMat);
     hair.position.y = 1.73;
@@ -150,7 +147,7 @@ function buildPlayerModel() {
     hair.castShadow = true;
     rig.add(hair);
 
-    // Face visor (1v1.lol signature)
+    // Visor (1v1.lol signature)
     const visorMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x335599, emissiveIntensity: 0.25 });
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.06), visorMat);
     visor.position.set(0, 1.66, 0.36);
@@ -198,7 +195,11 @@ export function initPlayerControls(camera, domElement) {
     });
 }
 
-function toggleBuildMode() { buildModeActive = !buildModeActive; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
+function toggleBuildMode() { 
+    buildModeActive = !buildModeActive; 
+    if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); 
+}
+
 export function isBuildModeActive() { return buildModeActive; }
 export function setBuildModeActive(active) { buildModeActive = active; if (window.onBuildModeToggle) window.onBuildModeToggle(buildModeActive); }
 
@@ -214,13 +215,19 @@ export function applyCosmetics() {
         if (child.isMesh) {
             if (child.position.y > 1.5) child.material.color.set(skinColor);
             else if (child.position.y < 0.6 && child.position.x !== 0) child.material.color.set(pantsColor);
-            else if (child.position.y < 0.3) {} // keep boots black
+            else if (child.position.y < 0.3) { /* keep boots black */ }
             else child.material.color.set(shirtColor);
         }
     });
 }
 
-export function respawnPlayer() { player.health = CONFIG.player.health; player.shield = CONFIG.player.shield; player.stamina = 100; player.velocity.set(0, 0, 0); player.alive = true; }
+export function respawnPlayer() { 
+    player.health = CONFIG.player.health; 
+    player.shield = CONFIG.player.shield; 
+    player.stamina = 100; 
+    player.velocity.set(0, 0, 0); 
+    player.alive = true; 
+}
 
 const tmpForward = new THREE.Vector3();
 const tmpRight = new THREE.Vector3();
@@ -327,12 +334,12 @@ function animateBody(dt, moving, speed) {
     // Find and animate limbs
     const parts = {};
     player.rig.children.forEach(child => {
-        if (child.position.x < -0.4 && child.geometry.type === 'CylinderGeometry') parts.leftArmUpper = child;
-        if (child.position.x > 0.4 && child.geometry.type === 'CylinderGeometry') parts.rightArmUpper = child;
-        if (child.position.x < -0.1 && child.position.y < 0.4 && child.geometry.type === 'CylinderGeometry') parts.leftThigh = child;
-        if (child.position.x > 0.1 && child.position.y < 0.4 && child.geometry.type === 'CylinderGeometry') parts.rightThigh = child;
-        if (child.position.x < -0.48 && child.geometry.type === 'CylinderGeometry') parts.leftForearm = child;
-        if (child.position.x > 0.48 && child.geometry.type === 'CylinderGeometry') parts.rightForearm = child;
+        if (child.position.x < -0.4 && child.geometry?.type === 'CylinderGeometry') parts.leftArmUpper = child;
+        if (child.position.x > 0.4 && child.geometry?.type === 'CylinderGeometry') parts.rightArmUpper = child;
+        if (child.position.x < -0.1 && child.position.y < 0.4 && child.geometry?.type === 'CylinderGeometry') parts.leftThigh = child;
+        if (child.position.x > 0.1 && child.position.y < 0.4 && child.geometry?.type === 'CylinderGeometry') parts.rightThigh = child;
+        if (child.position.x < -0.48 && child.geometry?.type === 'CylinderGeometry') parts.leftForearm = child;
+        if (child.position.x > 0.48 && child.geometry?.type === 'CylinderGeometry') parts.rightForearm = child;
     });
     
     if (parts.leftThigh) parts.leftThigh.rotation.x = legSwing;
@@ -342,6 +349,3 @@ function animateBody(dt, moving, speed) {
     if (parts.leftForearm) parts.leftForearm.rotation.z = armSwing * 0.5;
     if (parts.rightForearm) parts.rightForearm.rotation.z = -armSwing * 0.5;
 }
-
-
-export { input, player };
